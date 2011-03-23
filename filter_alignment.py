@@ -1,4 +1,19 @@
-"""This script filters an given alignment by given criteria. """
+"""
+
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 3 of the License, or
+  (at your option) any later version.
+  
+  Written (W) 2095-2010 Andre Kahles
+  Copyright (C) 2009-2010 by Friedrich Miescher Laboratory, Tuebingen, Germany
+
+  This script filters any given alignment by given criteria.
+  
+  For detailed usage information type:
+
+    python filter_alignment.py 
+"""
 
 import sys
 import re
