@@ -166,7 +166,7 @@ def main():
                     except KeyError:
                         features[(chrm, istart, iend)] = Feature()
                         features[(chrm, istart, iend)].add_mm_ex(min_ex_len, mm)
-                if not op[o] in ['I', 'S', 'H']:
+                if not op[o] in ['I', 'H', 'S']:
                     offset += size[o]
 
         infile.close()

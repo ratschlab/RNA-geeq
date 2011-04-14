@@ -16,11 +16,9 @@
 
 """
 
-
 import GFFParser
 import cPickle
 import sys
-import pdb
 from Bio.SeqFeature import SeqFeature
 
 def parse_options(argv):
@@ -33,6 +31,10 @@ def parse_options(argv):
     required = OptionGroup(parser, 'REQUIRED')
     required.add_option('-a', '--annotation', dest='anno', metavar='FILE', help='annotation file in gff3 format', default='-')
     required.add_option('-o', '--output', dest='outfile', metavar='FILE', help='annotation intron list', default='-')
+    optional = OptionGroup(parser, 'OPTIONAL')
+    optional.add_option('-S', '--show_sources', dest='show_sources', action='store_true', help='only show available sources of gff file', default=False)
+    optional.add_option('-s', '--sources', dest='sources', help='list of comma-separated soources to use from annotation', default='')
+    optional.add_option('-v', '--verbose', dest='verbose', action='store_true', help='verbosity', default=False)
     parser.add_option_group(required)
 
     (options, args) = parser.parse_args()
@@ -60,7 +62,7 @@ def fix_structure(trans_dict):
             trans_dict.features[idx].sub_features = [exon]
 
 def main():
-    """Main function ... """
+    """Main function handling the program flow and organizing the GFF parser."""
 
     (options, args) = parse_options(sys.argv)
 
@@ -71,31 +73,45 @@ def main():
 
     id_dict = examiner.available_limits(options.anno)['gff_id']
     intron_lists = dict()
+
     ### collect all available sources from gff-file
     source_dict = examiner.available_limits(options.anno)['gff_source_type']
-    taken_sources = dict()
-    ### parse only for exons and let the GFFparser 
-    ### infer the respecting parents (otherwise doubled entries occured)
-    ### we sanitize the structure later on anyways
+    taken_sources = set()
     types = ['exon']
-    for key in source_dict.keys():
-        if key[1] in set(types):
-            if taken_sources.has_key(key[0]):
-                taken_sources[key[0]] += 1
-            else:
-                taken_sources[key[0]] = 1
+
+    ### parse only for exons and let the GFFparser 
+    ### infer the respective parents (otherwise doubled entries occured)
+    ### we sanitize the structure later on anyways
+    for key in [source[0] for source in source_dict.keys() if source[1] in types]:
+        taken_sources.add(key)
     
     ### print taken_sources
-    if len(taken_sources.keys()) == 0:
+    if len(taken_sources) == 0:
         print >> sys.stderr, 'No suitable sources found!'
         sys.exit(-1)
-    else:
-        source_strings = taken_sources.keys()
-        print "take sources %s" % source_strings
+
+    ### only show available sources - if neccessary
+    if options.show_sources:
+        print 'Parsed file %s\n' % options.anno
+        print 'Following sources are available:\n'
+        for source in taken_sources:
+            print source    
+        print '\nUse option -s to specify a comma-separated list of sources (-s source1,source2,source3), otherwise all sources are taken'
+        sys.exit(0)
+
+    if options.sources != '':
+        user_sources = set(options.sources.split(','))
+        taken_sources = taken_sources.intersection(user_sources)
+        if len(taken_sources) == 0:
+            print >> sys.stderr, 'The specified sources do not match any of the available sources - Please use option -S to get a list of available sources'
+            sys.exit(-1)
+
+    if options.verbose:
+        print "take sources %s" % str(list(taken_sources))
 
     ### build up gff-parsing filter
     gff_sources = []
-    for source in source_strings:
+    for source in taken_sources:
         gff_sources.extend(zip([source] * len(types), types))
 
     ### parse gff-file

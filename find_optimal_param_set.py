@@ -1,8 +1,23 @@
-"""This script finds an optimal parameter set to maximize the performance of a given feature file."""
+"""
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 3 of the License, or
+  (at your option) any later version.
+  
+  Written (W) 2095-2010 Andre Kahles
+  Copyright (C) 2009-2010 by Friedrich Miescher Laboratory, Tuebingen, Germany
+
+  This script finds an optimal parameter set to maximize the performance of a 
+  given intronfeature file.
+  
+  For detailed usage information type:
+
+    python find_optimal_param_set.py 
+
+"""
 
 import sys
 import cPickle
-import pdb
 
 class Feature(object):
     """Is an intron feature object"""
@@ -123,8 +138,6 @@ def get_performance_value(full_features, mm, ex, mc, annotation_list, options):
         except KeyError:
             alignment_list[chrm] = {intron:0}
 
-    #pdb.set_trace()
-
     ### match intron lists
     total_precision = float(0)
     total_recall = float(0)
@@ -222,7 +235,7 @@ def main():
 
     ### iterate over different filter dimensions
     #ex_list = [2, 4, 6, 8, 10, 12, 15, 20, 25, 30] # 10
-    ex_list = [2, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 ] # 10
+    ex_list = [2, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 ] # 15
     mm_list = [0, 1, 2, 3, 4, 5, 6]                # 7
     mc_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]      # 10   ==> 700 combinations
 
