@@ -36,6 +36,7 @@ def parse_options(argv):
     optional.add_option('-s', '--sources', dest='sources', help='list of comma-separated soources to use from annotation', default='')
     optional.add_option('-v', '--verbose', dest='verbose', action='store_true', help='verbosity', default=False)
     parser.add_option_group(required)
+    parser.add_option_group(optional)
 
     (options, args) = parser.parse_args()
     

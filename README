@@ -1,0 +1,82 @@
+===============================================================================
+ README
+===============================================================================
+
+This README file contains the following parts:
+
+    0 Information about SAFT
+    1 Installation and Dependencies
+    2 Description of the single tools
+    3 Description of the pipeline
+    4 Examples
+
+===============================================================================
+0 - Information about SAFT
+===============================================================================
+
+SAFT is the abbreviation for Simple Alignment Filtering Tool and was developed
+by Andre Kahles at the Friedrich Miescher Laboratory of the Max Planck Society
+in 2010 and 2011.
+
+Version: 0.1 (alpha) - 2011.04.15
+
+===============================================================================
+1 - Installation and Dependencies
+===============================================================================
+
+BioPython
+---------
+For the correct parsing of GFF3 file SAFT relies on BioPython. BioPython is
+available at www.biopython.org/
+Please make sure, that BioPython is available in your PYTHONPATH.
+
+SAMtools
+--------
+If you want to use BAM files as input, you need a working version of SAMtools
+(>= 0.1.7a) available in your PATH.
+You can download SAMtools from http://samtools.sourceforge.net/
+
+SAFT
+----
+To install SAFT, download the latest archive from
+http://www.fml.mpg.de/raetsch/suppl/srm-eval/SAFT
+
+Move the archive to a place of choice and unpack it. The directory
+SAFT-{VERSION} will be automatically created.
+
+You are ready to run SAFT :)
+
+===============================================================================
+2 - Description of the single tools
+===============================================================================
+
+Following tools are available:
+    2.1  - filter_alignment.py
+    2.2a - gen_intronlist_from_annotation.py
+    2.2b - get_intron_features.py
+    2.3  - compare_to_features.py
+    2.4  - find_optimal_param_set.py
+
+2.1 - filter_alignment.py
+-------------------------
+
+This tool filters a given SAM file according to specified filtering criteria. 
+You can either pipe a SAM file into the script or provide an input file. Output
+can be written to stdout or a given file. By default the output file is modified
+version of the input name, tagged with the filtering criteria.
+
+To specify filtering criteria you can choose between maximal mismatches, min
+exon length (which is the minimal segment length of spliced reads), a maximal
+intron length, or features such as the clipping state.
+
+Further details are written in the usage screen of the script. Just type
+    python filter_alignment.py
+to print the usage screen.
+
+
+
+===============================================================================
+3 - Description of the pipeline
+===============================================================================
+
+

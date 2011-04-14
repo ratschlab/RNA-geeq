@@ -17,7 +17,6 @@
 
 import sys
 import re
-import pdb
 
 class Feature(object):
     """Is an intron feature object"""
@@ -80,28 +79,32 @@ def parse_options(argv):
     from optparse import OptionParser, OptionGroup
 
     parser = OptionParser()
-    required = OptionGroup(parser, 'REQUIRED')
-    required.add_option('-a', '--alignment', dest='align', metavar='FILE', help='alignment file in sam format - can be given instead of alignment intron file (- for stdin)', default='')
-    optional = OptionGroup(parser, 'OPTIONAL')
-    optional.add_option('-o', '--outfile', dest='outfile', metavar='FILE', help='outfile - default is tagged infile or stdout for stdin processing', default='')
-    optional.add_option('-R', '--ignore_multireads', dest='multireads', metavar='FILE', help='file containing the multireads to ignore', default='-')
-    optional.add_option('-i', '--intron_features', dest='intron_features', metavar='FILE', help='intron features file - only spliced reads present in this file are kept', default='-')
-    optional.add_option('-M', '--max_intron_len', dest='max_intron_len', metavar='INT', type='int', help='maximal intron length [100000000]', default='100000000')
-    optional.add_option('-e', '--min_exon_len', dest='min_exon_len', metavar='INT', type='int', help='minimal exon length [0]', default=0)
-    optional.add_option('-X', '--max_mismatches', dest='max_mismatches', metavar='INT', type='int', help='maximum number of allowed mismathes [10000]', default=10000)
-    optional.add_option('-w', '--window', dest='window', metavar='INT', type='int', help='size of overlap-window to count suboptimal alignments as one stratum [2]', default=2)
-    optional.add_option('-v', '--verbose', dest='verbose', action='store_true', help='verbosity', default=False)
-    optional.add_option('-d', '--del_worse', dest='del_worse', action='store_true', \
+    io_opts = OptionGroup(parser, 'I/O OPTIONS')
+    io_opts.add_option('-a', '--alignment', dest='align', metavar='FILE', help='alignment file in sam format (- for stdin)', default='-')
+    io_opts.add_option('-o', '--outfile', dest='outfile', metavar='FILE', help='outfile - default is tagged infile or stdout for stdin processing', default='')
+    filter_crit = OptionGroup(parser, 'FILTER CRITERIA')
+    filter_crit.add_option('-R', '--ignore_multireads', dest='multireads', metavar='FILE', help='file containing the multireads to ignore', default='-')
+    filter_crit.add_option('-M', '--max_intron_len', dest='max_intron_len', metavar='INT', type='int', help='maximal intron length [100000000]', default='100000000')
+    filter_crit.add_option('-e', '--min_exon_len', dest='min_exon_len', metavar='INT', type='int', help='minimal exon length [0]', default=0)
+    filter_crit.add_option('-X', '--max_mismatches', dest='max_mismatches', metavar='INT', type='int', help='maximum number of allowed mismathes [10000]', default=10000)
+    filter_crit.add_option('-i', '--intron_features', dest='intron_features', metavar='FILE', help='intron features file - only spliced reads present in this file are kept', default='-')
+    filter_crit.add_option('-c', '--clip_filter', dest='clip_filter', action='store_true', help='filters clipped reads', default=False)
+    filter_hand = OptionGroup(parser, 'FILTER HANDLING')
+    filter_hand.add_option('-d', '--del_worse', dest='del_worse', action='store_true', \
         help='all alignments of the same read with more mismatches are deleted as well. File must be sorted by read ID!', default=False)
-    optional.add_option('-n', '--no_suboptimal', dest='no_suboptimal', action='store_true', \
+    filter_hand.add_option('-n', '--no_suboptimal', dest='no_suboptimal', action='store_true', \
         help='if suboptimal spliced alignments occur and a batter alignment is available, keep only the best alignment. File must be sorted by read id and flag', default=False)
-    optional.add_option('-c', '--clip_filter', dest='clip_filter', action='store_true', help='filters clipped reads', default=False)
-    parser.add_option_group(required)
-    parser.add_option_group(optional)
+    filter_hand.add_option('-w', '--window', dest='window', metavar='INT', type='int', help='size of overlap-window to count suboptimal alignments as one stratum [2]', default=2)
+    others = OptionGroup(parser, 'OTHERS')
+    others.add_option('-v', '--verbose', dest='verbose', action='store_true', help='verbosity', default=False)
+    parser.add_option_group(io_opts)
+    parser.add_option_group(filter_crit)
+    parser.add_option_group(filter_hand)
+    parser.add_option_group(others)
 
     (options, args) = parser.parse_args()
     
-    if len(argv) < 3 :
+    if len(argv) < 2:
         parser.print_help()
         sys.exit(2)
 
