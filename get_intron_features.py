@@ -1,4 +1,20 @@
-""" This function extracts intronic features from an alignment."""
+"""
+
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 3 of the License, or
+  (at your option) any later version.
+  
+  Written (W) 2009-2010 Andre Kahles
+  Copyright (C) 2009-2010 by Friedrich Miescher Laboratory, Tuebingen, Germany
+
+  This program extracts intron features from a given alignment.
+  
+  For detailed usage information type:
+
+    python get_intron_featuress.py 
+
+"""
 
 import sys
 import re

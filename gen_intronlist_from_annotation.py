@@ -1,3 +1,21 @@
+"""
+
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 3 of the License, or
+  (at your option) any later version.
+  
+  Written (W) 2009-2010 Andre Kahles
+  Copyright (C) 2009-2010 by Friedrich Miescher Laboratory, Tuebingen, Germany
+
+  This program extracts intron features from a given annotation in GFF3 format
+  
+  For detailed usage information type:
+
+    python gen_intronlist_from_annotation.py
+
+"""
+
 
 import GFFParser
 import cPickle
