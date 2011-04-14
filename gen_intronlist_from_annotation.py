@@ -33,7 +33,7 @@ def parse_options(argv):
     required.add_option('-o', '--output', dest='outfile', metavar='FILE', help='annotation intron list', default='-')
     optional = OptionGroup(parser, 'OPTIONAL')
     optional.add_option('-S', '--show_sources', dest='show_sources', action='store_true', help='only show available sources of gff file', default=False)
-    optional.add_option('-s', '--sources', dest='sources', help='list of comma-separated soources to use from annotation', default='')
+    optional.add_option('-s', '--sources', dest='sources', metavar='SOURCELIST', help='list of comma-separated sources to use from annotation', default='')
     optional.add_option('-v', '--verbose', dest='verbose', action='store_true', help='verbosity', default=False)
     parser.add_option_group(required)
     parser.add_option_group(optional)
