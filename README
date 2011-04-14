@@ -74,6 +74,42 @@ Further details are written in the usage screen of the script. Just type
 to print the usage screen.
 
 
+2.2a - gen_intronlist_from_annotation.py
+----------------------------------------
+
+This tool generate the internal intron representation of annotated introns from
+any given annotation in GFF3 format. You only have to specify the path to the
+annotation file using the option -a and an output file via the option -o.
+
+The script requires BioPython to be available in the PYTHONPATH. Please use
+section 1 of this file for further information.
+
+Further details are written in the usage screen of the script. Just type
+    python gen_intronlist_from_annotation.py
+to print the usage screen.
+
+2.2b - get_intron_features.py
+-----------------------------
+
+With this script you can extract the intron positions together with descriptive
+alignment features into a so called feature-file.
+
+You only need to specify an input alignment in SAM or BAM format using the
+option -a and the output destination using -o. If the input is BAM you must
+switch the input type using -b. For BAM input you further need
+SAMtools installed (see section 1). You either need SAMtools in your PATH or you
+have to provide the -s option.
+
+Further details are written in the usage screen of the script. Just type
+    python get_intron_features.py
+to print the usage screen.
+
+2.3  - compare_to_features.py
+-----------------------------
+
+This script evaluates the agreement of a given alignment to a given annotation
+that is represented as an intron list. First you need to generate the intron
+list (see section 2.2a) and the alignment feature file (section 2.2b).
 
 ===============================================================================
 3 - Description of the pipeline
