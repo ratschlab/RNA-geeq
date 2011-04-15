@@ -255,7 +255,7 @@ def main():
             for mc in mc_list:
                 if options.verbose and checked_combs % 10 == 0:
                     print 'checked %i parameter combinations' % checked_combs
-                    print 'best scores so far:\n \tbest fScore: %0.2f, best recal: %0.2f, best precision: %0.2f' % (max_fsc[2], max_rec[1], max_pre[0])
+                    print 'best scores so far:\n \tbest fScore: %0.2f, best recall: %0.2f, best precision: %0.2f' % (max_fsc[2], max_rec[1], max_pre[0])
                 checked_combs += 1
 
                 (pre, rec) = get_performance_value(full_features, mm, ex, mc, annotation_list, options)    
