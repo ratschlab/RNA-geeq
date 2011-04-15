@@ -101,10 +101,10 @@ def parse_options(argv):
     required.add_option('-f', '--features', dest='features', metavar='FILE', help='alignment intron features', default='-')
     required.add_option('-i', '--annotation_introns', dest='anno_int', metavar='FILE', help='annotation intron list', default='-')
     optional = OptionGroup(parser, 'OPTIONAL')
-    optional.add_option('-X', '--max_feat_mismatches', dest='max_feat_mismatches', metavar='INT', type='int', help='max number of mismatches for feat generation[80]', default=80)
     optional.add_option('-E', '--exclude_introns', dest='exclude_introns', metavar='STRINGLIST', help='list of comma separated intron files to exclude from submitted features', default='-')
     optional.add_option('-I', '--max_intron_len', dest='max_intron_len', metavar='INT', type='int', help='maximal intron length [10000000]', default=10000000)
     optional.add_option('-s', '--ignore_strand', dest='ignore_strand', action='store_true', help='ignore strand information present in annotation', default=False)
+    optional.add_option('-X', '--max_feat_mismatches', dest='max_feat_mismatches', metavar='INT', type='int', help='max number of mismatches for feat generation [80] (do only change, if you are absolutely sure!)', default=80)
     optional.add_option('-v', '--verbose', dest='verbose', action='store_true', help='verbosity', default=False)
     parser.add_option_group(required)
     parser.add_option_group(optional)
@@ -233,6 +233,7 @@ def main():
         print 'Parsing completed.' 
         print 'parsed %i features from %s' % (line_counter, options.features)
 
+    ### SEARCH SPACE
     ### iterate over different filter dimensions
     #ex_list = [2, 4, 6, 8, 10, 12, 15, 20, 25, 30] # 10
     ex_list = [2, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 ] # 15
