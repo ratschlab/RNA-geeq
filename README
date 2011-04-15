@@ -1,6 +1,6 @@
-===============================================================================
+================================================================================
  README
-===============================================================================
+================================================================================
 
 This README file contains the following parts:
 
@@ -10,9 +10,9 @@ This README file contains the following parts:
     3 Description of the pipeline
     4 Examples
 
-===============================================================================
+================================================================================
 0 - Information about SAFT
-===============================================================================
+================================================================================
 
 SAFT is the abbreviation for Simple Alignment Filtering Tool and was developed
 by Andre Kahles at the Friedrich Miescher Laboratory of the Max Planck Society
@@ -20,9 +20,9 @@ in 2010 and 2011.
 
 Version: 0.1 (alpha) - 2011.04.15
 
-===============================================================================
+================================================================================
 1 - Installation and Dependencies
-===============================================================================
+================================================================================
 
 BioPython
 ---------
@@ -46,15 +46,15 @@ SAFT-{VERSION} will be automatically created.
 
 You are ready to run SAFT :)
 
-===============================================================================
+================================================================================
 2 - Description of the single tools
-===============================================================================
+================================================================================
 
 Following tools are available:
     2.1  - filter_alignment.py
     2.2a - gen_intronlist_from_annotation.py
     2.2b - get_intron_features.py
-    2.3  - compare_to_features.py
+    2.3  - evaluate_features.py
     2.4  - find_optimal_param_set.py
 
 2.1 - filter_alignment.py
@@ -104,15 +104,79 @@ Further details are written in the usage screen of the script. Just type
     python get_intron_features.py
 to print the usage screen.
 
-2.3  - compare_to_features.py
+2.3  - evaluate_features.py
 -----------------------------
 
 This script evaluates the agreement of a given alignment to a given annotation
 that is represented as an intron list. First you need to generate the intron
 list (see section 2.2a) and the alignment feature file (section 2.2b).
 
-===============================================================================
-3 - Description of the pipeline
-===============================================================================
+With the option -i you can choose what annotation intron list to use and with -f
+you provide the alignment feature file. 
 
+Additionally, you can filter the evaluated features by many different criteria
+as maximal mismatches or intron length. You can also restrict the evaluation to
+several chromosomes/conttigs or to specific introns.
+
+Further details are written in the usage screen of the script. Just type
+    python evaluate_features.py
+to print the usage screen.
+
+2.4  - find_optimal_param_set.py
+--------------------------------
+
+This script performs an exhaustive search over the three parameters coordinates 
+ * max mismatches           [0, 1, 2, 3, 4, 5, 6]
+ * min segment length       [2, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+ * min intron read support  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+The tested values for each criterion are currently hard coded and are written in
+brackets behind the criterion. If you want to change them manually, just search 
+for the term "SEARCH SPACE" in find_optimal_param_set.py.
+
+As for the feature evaluation: with the option -i you can choose what annotation
+intron list to use and with -f you provide the alignment feature file.
+
+You further need to define two output files
+    -b , --best_score   the file to store the best scoring parameters
+    -m , --matrix       the file to store all test parameter combinations
+
+Further details are written in the usage screen of the script. Just type
+    python find_optimal_param_set.py
+to print the usage screen.
+
+================================================================================
+3 - Description of the pipeline
+================================================================================
+
+For intron agreement evaluation, you would need following pipeline:
+
+    Data preparation
+        ==> gen_intronlist_from_annotation.py 
+        (==> filter_alignment.py -- optional)
+        ==> get_intron_features.py 
+    Evaluation:
+        ==> evaluate_features.py
+
+To find the optimal filter setting, you would need following pipeline:
+
+    Data preparation:
+        ==> gen_intronlist_from_annotation.py 
+        ==> get_intron_features.py 
+    Search:
+        ==> find_optimal_param_set.py
+        (==> filter_alignment.py -- optional)
+
+
+================================================================================
+4 - Examples
+================================================================================
+
+Example pipelines are provided as bash scripts and can be adapted.
+
+Intron agreement evaluation:
+    evaluate_alignment.sh
+
+Find optimal filter setting:
+    optimal_filter_set.sh
 
