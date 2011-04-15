@@ -59,7 +59,7 @@ def parse_options(argv):
     required.add_option('-o', '--outfile', dest='outfile', metavar='FILE', help='intron feature file', default='-')
     optional = OptionGroup(parser, 'OPTIONAL')
     optional.add_option('-b', '--bam_input', dest='bam_input', action='store_true', help='input has BAM format - does not work for STDIN', default=False)
-    optional.add_option('-s', '--samtools', dest='samtools', metavar='PATH', help='if SAMtools is not in your PATH, give the right path here (only neccessary for BAM input)', default='')
+    optional.add_option('-s', '--samtools', dest='samtools', metavar='PATH', help='if SAMtools is not in your PATH, provide the right path here (only neccessary for BAM input)', default='')
     optional.add_option('-v', '--verbose', dest='verbose', action='store_true', help='verbosity', default=False)
     parser.add_option_group(required)
     parser.add_option_group(optional)

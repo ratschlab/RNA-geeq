@@ -18,8 +18,6 @@
 
 import cPickle
 import sys
-import plot
-import pdb
 
 def parse_options(argv):
 
@@ -41,10 +39,8 @@ def parse_options(argv):
     optional.add_option('-M', '--max_mismatches', dest='max_mismatches', metavar='INT', type='int', help='maximum number of allowed mismacthes [1000000]', default=1000000)
     optional.add_option('-c', '--min_coverage', dest='min_coverage', metavar='INT', type='int', help='minimal coverage to count an intron [0]', default='0')
     optional.add_option('-C', '--min_coverage_2', dest='min_coverage_2', metavar='INT', type='int', help='minimal coverage after applying all other filters [1]', default='1')
-    optional.add_option('-H', '--histogram', dest='histogram', metavar='PATH', help='destination PATH of evaluation plots', default='-')
     optional.add_option('-x', '--exclude_chrms', dest='exclude_chrm', metavar='STRINGLIST', help='list of comma separated chromosomes to exclude from evaluation', default='-')
     optional.add_option('-E', '--exclude_introns', dest='exclude_introns', metavar='STRINGLIST', help='list of comma separated intron files to exclude from submitted features', default='-')
-    optional.add_option('-F', '--full_analysis', dest='full_analysis', action='store_true', help='generates overlap and coverage plots', default=False)
     optional.add_option('-o', '--outfile_base', dest='outfile_base', metavar='PATH', help='basedir for outfiles written', default='-')
     optional.add_option('-d', '--details', dest='details', action='store_true', help='destination for generated alignment intron list', default=False)
     optional.add_option('-v', '--verbose', dest='verbose', action='store_true', help='verbosity', default=False)
@@ -127,162 +123,10 @@ def build_intron_list(options):
     return intron_lists
 
 
-def evaluate_intron_overlap(options, annotation, not_matched, plotlist):
-    """This part evaluates the overlap between annotation and alignment at the intron boundaries."""
-
-    total_overlap = 0
-    total_enclosing = 0
-    total_introns = 0
-    total_offset = 0
-
-    not_matched_idx = not_matched.keys()
-    not_matched_idx.sort()
-
-    distance_5p = dict()
-    distance_3p = dict()
-
-    for chrm in not_matched_idx:
-        ### load introns
-        align_idx = list(not_matched[chrm])
-        anno_idx = annotation[chrm].keys()
-
-        ### sort both intron lists by starting position and intron length
-        align_idx.sort(lambda u, v: v[2] - u[2])
-        align_idx.sort(lambda u, v: u[1] - v[1])
-        anno_idx.sort(lambda u, v: v[2] - u[2])
-        anno_idx.sort(lambda u, v: u[1] - v[1])
-        
-        ### initialize counters
-        counter_start = 0
-        enclosing_introns = 0 #set()
-        overlap_introns = 0
-        completely_offset = 0
-        
-        min_anno = 0
-
-        ### we search for each intron not matching the annotation exactly, for wich of the annotated introns it laps least into an exon
-        for align in align_idx:
-            ### go to next annotated intron overlapping the current one
-            while counter_start < len(anno_idx) and anno_idx[counter_start][2] < align[1] :
-                counter_start += 1
-           
-            anno_counter = counter_start
-            min_overlap = 10000000
-            if anno_counter < len(anno_idx):
-                min_5p_overlap = abs(anno_idx[anno_counter][1] - align[1])
-                min_3p_overlap = abs(anno_idx[anno_counter][2] - align[2])
-            else: # take overlap to last annotated intron
-                min_5p_overlap = abs(anno_idx[-1][1] - align[1])
-                min_3p_overlap = abs(anno_idx[-1][2] - align[2])
-
-            no_match = True
-
-            ### iterate over all overlapping introns and search for the one with the smallest overlap
-            ### (overlap means in this context the amount of the read lapping over the boundaries of the intron)
-            while (anno_counter < len(anno_idx)) and (anno_idx[anno_counter][1] < align[2]) :
-                no_match = False 
-                if abs(anno_idx[anno_counter][1] - align[1]) + abs(anno_idx[anno_counter][2] - align[2]) < min_overlap:
-                    min_anno = anno_counter
-                    min_overlap = abs(anno_idx[anno_counter][1] - align[1]) + abs(anno_idx[anno_counter][2] - align[2]) 
-                ### min 5p overlap
-                if abs(anno_idx[anno_counter][1] - align[1]) < min_5p_overlap:
-                    min_5p_overlap = abs(anno_idx[anno_counter][1] - align[1])
-                ### min 3p overlap
-                if abs(anno_idx[anno_counter][2] - align[2]) < min_3p_overlap:
-                    min_3p_overlap = abs(anno_idx[anno_counter][2] - align[2])
-
-                anno_counter += 1
-            
-            ### handle case, where no annotated intron overlaps and check, if next intron would be nearer than the last
-            if no_match and (anno_counter + 1) < len(anno_idx):
-                if abs(anno_idx[anno_counter + 1][1] - align[1]) + abs(anno_idx[anno_counter + 1][2] - align[2]) < min_overlap:
-                    min_anno = anno_counter + 1
-                    min_overlap = abs(anno_idx[min_anno][1] - align[1]) + abs(anno_idx[min_anno][2] - align[2]) 
-                min_5p_overlap = min(min_5p_overlap, abs(anno_idx[anno_counter + 1][1] - align[1]))
-                min_3p_overlap = min(min_3p_overlap, abs(anno_idx[anno_counter + 1][2] - align[2]))
-    
-
-            ### update distance dict
-            try:
-                distance_5p[min_5p_overlap] += 1
-            except KeyError:
-                distance_5p[min_5p_overlap] = 1
-            try:
-                distance_3p[min_3p_overlap] += 1
-            except KeyError:
-                distance_3p[min_3p_overlap] = 1
-
-            ### test for inclusion
-            if (anno_idx[min_anno][1] <= align[1] and anno_idx[min_anno][2] >= align[2]):
-                enclosing_introns += 1
-            ### test for overlap
-            elif (anno_idx[min_anno][1] <= align[1] and anno_idx[min_anno][2] > align[1]) or \
-                (anno_idx[min_anno][2] >= align[2]):
-                overlap_introns += 1
-            else:
-                completely_offset += 1
-                continue
-
-            if options.details:
-                print '---------------------------'
-                print 'in chrm %s: %s' % (chrm, annotation[chrm][anno_idx[min_anno]])
-                print 'overlap: %s %s' % (anno_idx[min_anno][1] - align[1], anno_idx[min_anno][2] - align[2]) 
-                print 'length difference: %s' % ((anno_idx[min_anno][2] - anno_idx[min_anno][1]) - (align[2] - align[1])) 
-                print 'read set: %s' % str(align)
-                print 'anno set: %s' % str(anno_idx[min_anno])
-
-        print '---------------------------'
-        print 'in chrm %s: found %s introns overlapping an annotated intron (for %s introns not matching the annotation)' % (chrm, overlap_introns, len(not_matched[chrm]))
-        print 'in chrm %s: found %s introns enclosing an annotated intron (for %s introns not matching the annotation)' % (chrm, enclosing_introns, len(not_matched[chrm]))
-        print 'in chrm %s: found %s introns not overlapping to any annotated intron (for %s introns not matching the annotation)' % (chrm, completely_offset, len(not_matched[chrm]))
-        total_overlap += overlap_introns
-        total_enclosing += enclosing_introns
-        total_offset += completely_offset
-        total_introns += len(not_matched[chrm])
-
-    print '---------------------------\n---------------------------'
-    print 'TOTAL: found %s introns overlapping an annotated intron (for %s introns not matching the annotation)' % (total_overlap, total_introns)
-    print '       found %s introns enclosing an annotated intron (for %s introns not matching the annotation)' % (total_enclosing, total_introns)
-    print '       found %s introns not overlapping to any annotated intron (for %s introns not matching the annotation)' % (total_offset, total_introns)
-    print '---------------------------'
-
-    
-    ### write plotlists
-    if len(distance_5p.keys()) == 0:
-        distance_5p[0] = 0
-    if len(distance_3p.keys()) == 0:
-        distance_3p[0] = 0
-    
-    plotlist.append(plot.Plot('Splice site distance distribution 3 prime', distance_3p, xlabel='distance', ylabel='occurrences', xlog=True, ylog=True))
-    plotlist.append(plot.Plot('Splice site distance distribution 5 prime', distance_5p, xlabel='distance', ylabel='occurrences', xlog=True, ylog=True))
-
-def build_intron_support_list(alignment_list, plotlist):
-    """Builds up a dictionairy with number of supp. reads as keys and number of introns as values. """
-    intron_support_list = dict()
-
-    max_len = 0
-    for chrm in alignment_list.keys():
-        for intron in alignment_list[chrm]:
-            try:
-                intron_support_list[len(alignment_list[chrm][intron])] += 1
-            except KeyError:
-                intron_support_list[len(alignment_list[chrm][intron])] = 1
-            max_len = max(len(alignment_list[chrm][intron]), max_len)
-
-    ### sanitize for plotting
-    diff = set(range(1, max_len)).difference(set(intron_support_list.keys()))
-    for d in diff:
-        intron_support_list[d] = 0
-
-    plotlist.append(plot.Plot('Reads supporting an intron', intron_support_list, xlabel='number of supp. reads', ylabel='number of introns', xlog=True, ylog=True))
-
 def main():
     """Main function for comparing two intron lists """    
     
     options = parse_options(sys.argv)
-
-    plotlist = plot.Plotlist()
-
 
     if options.outfile_base != '-':
         outfile_base = (options.outfile_base + '/' + options.features.split('/')[-1])
@@ -453,21 +297,6 @@ def main():
         print >> outf, _recall_line
         print >> outf, _precision_line
         outf.close() 
-    
-    if options.full_analysis:
-        ### evaluate overlap only for those reads not exactly matching the annotation introns
-        evaluate_intron_overlap(options, annotation_list, non_matched, plotlist)
-
-        ### build list of intron supporting reads
-        build_intron_support_list(alignment_list, plotlist)
-
-        ### plot histograms
-        if options.histogram != '-':
-            plotlist.plot(options.histogram)
-
-        ### write plotlists to file, for later evaluation
-        plot_out = (outfile_base + '.introns.plotlist')
-        cPickle.dump(plotlist, open(plot_out, 'w'))
     
 if __name__ == '__main__':
     main()
