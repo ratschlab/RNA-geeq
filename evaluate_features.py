@@ -43,7 +43,7 @@ def parse_options(argv):
     iosettings.add_option('-p', '--performance_log', dest='performance_log', action='store_true', help='store the intron recovery performance in extra log [off]', default=False)
     iosettings.add_option('-o', '--outfile_base', dest='outfile_base', metavar='PATH', help='basedir for performance log', default='-')
     optional = OptionGroup(parser, 'OTHERS')
-    optional.add_option('-X', '--max_feat_mismatches', dest='max_feat_mismatches', metavar='INT', type='int', help='max number of mismatches for feat generation[80]', default=80)
+    optional.add_option('-X', '--max_feat_mismatches', dest='max_feat_mismatches', metavar='INT', type='int', help='max number of mismatches for feat generation [80] (only change this, if you are absolutely sure!)', default=80)
     optional.add_option('-v', '--verbose', dest='verbose', action='store_true', help='verbosity', default=False)
     parser.add_option_group(required)
     parser.add_option_group(filtering)
