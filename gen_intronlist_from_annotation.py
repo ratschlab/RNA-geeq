@@ -20,6 +20,7 @@ import GFFParser
 import cPickle
 import sys
 from Bio.SeqFeature import SeqFeature
+import pdb
 
 def parse_options(argv):
 
@@ -78,6 +79,7 @@ def main():
     ### collect all available sources from gff-file
     source_dict = examiner.available_limits(options.anno)['gff_source_type']
     taken_sources = set()
+    #types = ['gene', 'mRNA', 'exon', 'CDS']
     types = ['exon']
 
     ### parse only for exons and let the GFFparser 
