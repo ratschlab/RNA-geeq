@@ -51,14 +51,15 @@ You are ready to run SAFT :)
 ================================================================================
 
 Following tools are available:
-    2.1  - filter_alignment.py
-    2.2a - gen_intronlist_from_annotation.py
-    2.2b - get_intron_features.py
-    2.3  - evaluate_features.py
-    2.4  - find_optimal_param_set.py
+    2.1 - (a) filter_alignment.py
+        - (b) filter_features.py
+    2.2 - (a) gen_intronlist_from_annotation.py
+        - (b) get_intron_features.py
+    2.3 - evaluate_features.py
+    2.4 - find_optimal_param_set.py
 
-2.1 - filter_alignment.py
--------------------------
+2.1 - (a) filter_alignment.py
+-----------------------------
 
 This tool filters a given SAM file according to specified filtering criteria. 
 You can either pipe a SAM file into the script or provide an input file. Output
@@ -69,13 +70,34 @@ To specify filtering criteria you can choose between maximal mismatches, min
 exon length (which is the minimal segment length of spliced reads), a maximal
 intron length, or features such as the clipping state.
 
+You can also filter spliced alignments according to a given minimal alignment
+support. Therefore you need to generate the intron features of your alignment
+(see section 2.2(b)) and filter them with the support criteria unsing
+filter_features.py (see section 2.1(b)). You can then use this filtered version
+of the feature file for only keeping those spliced alignments given in the file
+by using command line option -i.
+
 Further details are written in the usage screen of the script. Just type
     python filter_alignment.py
 to print the usage screen.
 
+2.1 - (b) filter_features.py
+----------------------------
 
-2.2a - gen_intronlist_from_annotation.py
-----------------------------------------
+The script filters a given feature list according to given criteria. Only by
+using this script you can later filter according to minimal splice site coverage
+with filter_alignment.py (see section 2.1(a)). 
+
+To create the feature list of an alignment, you can run get_intron_features.py
+(section 2.2(b)).
+
+Further details are written in the usage screen of the script. Just type
+    python filter_features.py
+to print the usage screen.
+
+
+2.2 - (a) gen_intronlist_from_annotation.py
+-------------------------------------------
 
 This tool generate the internal intron representation of annotated introns from
 any given annotation in GFF3 format. You only have to specify the path to the
@@ -88,8 +110,8 @@ Further details are written in the usage screen of the script. Just type
     python gen_intronlist_from_annotation.py
 to print the usage screen.
 
-2.2b - get_intron_features.py
------------------------------
+2.2 - (b) get_intron_features.py
+--------------------------------
 
 With this script you can extract the intron positions together with descriptive
 alignment features into a so called feature-file.
