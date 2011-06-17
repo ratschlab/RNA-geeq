@@ -4,7 +4,7 @@ set -e
 
 if [ -z "$1" ]
 then
-    echo "usage: $0 <annotation in GFF3> <alignment in SAM> <best_score> <score_matrix> <filtered outfile>"
+    echo "usage: $0 <annotation in GFF3> <alignment in BAM> <best_score> <score_matrix> <filtered outfile>"
     echo ""
     exit 1
 else
@@ -13,7 +13,7 @@ fi
 
 if [ -z "$2" ]
 then
-    echo "usage: $0 <annotation in GFF3> <alignment in SAM> <best_score> <score_matrix> <filtered outfile>"
+    echo "usage: $0 <annotation in GFF3> <alignment in BAM> <best_score> <score_matrix> <filtered outfile>"
     echo ""
     exit 1
 else
@@ -22,7 +22,7 @@ fi
 
 if [ -z "$3" ]
 then
-    echo "usage: $0 <annotation in GFF3> <alignment in SAM> <best_score> <score_matrix> <filtered outfile>"
+    echo "usage: $0 <annotation in GFF3> <alignment in BAM> <best_score> <score_matrix> <filtered outfile>"
     echo ""
     exit 1
 else
@@ -31,7 +31,7 @@ fi
 
 if [ -z "$4" ]
 then
-    echo "usage: $0 <annotation in GFF3> <alignment in SAM> <best_score> <score_matrix> <filtered outfile>"
+    echo "usage: $0 <annotation in GFF3> <alignment in BAM> <best_score> <score_matrix> <filtered outfile>"
     echo ""
     exit 1
 else
@@ -40,7 +40,7 @@ fi
 
 if [ -z "$5" ]
 then
-    echo "usage: $0 <annotation in GFF3> <alignment in SAM> <best_score> <score_matrix> <filtered outfile>"
+    echo "usage: $0 <annotation in GFF3> <alignment in BAM> <best_score> <score_matrix> <filtered outfile>"
     echo ""
     exit 1
 else
@@ -91,7 +91,7 @@ then
         support_string="-i ${alignment}.features_filtered"
     fi
 
-    python filter_alignement.py -a $alignment -o $filter_out -e $min_ex_len -X $max_mm $support_string
+    python filter_alignement.py -b -a $alignment -o $filter_out -e $min_ex_len -X $max_mm $support_string -s `which samtools`
     echo ""
 fi
 

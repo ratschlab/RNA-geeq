@@ -1,20 +1,20 @@
 <tool id="SAFT" name="SAFT" version="0.2">
   <description>Simple Alignment Filtering Tool</description>
   <command>
-    ../optimal_filter.sh $anno_input_selected $sam_alignments $best_score $score_matrix $Filtered_Alignment 
+     /home/galaxy/galaxy-2.1.2009/tools/filters/SAFT/galaxy/optimal_filter_set_galaxy.sh $anno_input_selected $sam_alignments $best_score $score_matrix $Filtered_Alignment 
     >> $Log_File
   </command>
 
   <inputs>
 	<param format="gff3" name="anno_input_selected" type="data" label="Genome annotation in GFF3 format" help="Partial genome annotation in GFF3 format describing the known gene structures for the provided genome."/>
-    <param format="sam" name="sam_alignments" type="data" label="SAM alignment file" help="Alignment file in SAM format."/>
+    <param format="bam" name="sam_alignments" type="data" label="BAM alignment file" help="Alignment file in BAM format."/>
     <!--<param format="sam" name="sam_alignments" type="data" label="AM alignment file" help="BAM alignment file. Can be generated from SAM files using the SAM Tools."/>-->
   </inputs>
 
   <outputs>
     <data format="sam" name="Filtered_Alignment" label="Optimally filtered output file"/>
     <data format="txt" name="best_score" label="Best Scorings"/>
-    <data format="txt" name="score_matrx" label="Evaluated Filter Combinations"/>
+    <data format="txt" name="score_matrix" label="Evaluated Filter Combinations"/>
     <data format="txt" name="Log_File" label="SAFT log file"/>
   </outputs>
 
@@ -38,7 +38,7 @@
 
 **What it does** 
 
-`SAFT` optimizes filtering criteria for a given alignemnt in SAM format.
+`SAFT` optimizes filtering criteria for a given alignemnt in BAM format.
 The filtering is optimized to produce an alignment set with maximal intron
 accuracy, measured on a given annotation in GFF format.
 
