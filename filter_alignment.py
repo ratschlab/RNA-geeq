@@ -17,6 +17,7 @@
 
 import sys
 import re
+import subprocess
 
 class Feature(object):
     """Is an intron feature object"""
@@ -82,6 +83,8 @@ def parse_options(argv):
     io_opts = OptionGroup(parser, 'I/O OPTIONS')
     io_opts.add_option('-a', '--alignment', dest='align', metavar='FILE', help='alignment file in sam format (- for stdin)', default='-')
     io_opts.add_option('-o', '--outfile', dest='outfile', metavar='FILE', help='outfile - default is tagged infile or stdout for stdin processing', default='')
+    io_opts.add_option('-b', '--bam_input', dest='bam_input', action='store_true', help='input has BAM format - does not work for STDIN', default=False)
+    io_opts.add_option('-s', '--samtools', dest='samtools', metavar='PATH', help='if SAMtools is not in your PATH, provide the right path here (only neccessary for BAM input)', default='')
     filter_crit = OptionGroup(parser, 'FILTER CRITERIA')
     filter_crit.add_option('-R', '--ignore_multireads', dest='multireads', metavar='FILE', help='file containing the multireads to ignore', default='-')
     filter_crit.add_option('-M', '--max_intron_len', dest='max_intron_len', metavar='INT', type='int', help='maximal intron length [100000000]', default='100000000')
@@ -318,6 +321,12 @@ def main():
     counter = 0
     filter_counter = 0
 
+    if options.bam_input:
+        if options.samtools == '':
+            options.samtools = 'samtools'
+        else:
+            options.samtools = '%s/samtools' % options.samtools
+
     if options.outfile == '':
         if options.align != '-':
             outfile_base = options.align
@@ -340,12 +349,21 @@ def main():
             if options.intron_features != '-':
                 outfile_base += '_featFile'
             
-            outfile_base = (re.sub('.sam', '', outfile_base) + '.sam')
-            outfile = open(outfile_base, 'w')
+            if options.bam_input:
+                outfile_base = (re.sub('.bam', '', outfile_base) + '.bam')
+                outfile_handle = subprocess.Popen([options.samtools, 'view', '-bS', '-o' + outfile_base, '-'], stdin=subprocess.PIPE)
+                outfile = outfile_handle.stdin
+            else:
+                outfile_base = (re.sub('.sam', '', outfile_base) + '.sam')
+                outfile = open(outfile_base, 'w')
         else:
             outfile = sys.stdout
     else:
-        outfile = open(options.outfile, 'w')
+        if options.bam_input:
+            outfile_handle = subprocess.Popen([options.samtools, 'view', '-bS', '-o' + options.outfile, '-'], stdin=subprocess.PIPE)
+            outfile = outfile_handle.stdin
+        else:
+            outfile = open(options.outfile, 'w')
 
     first_line = True
     curr_lines = []
@@ -362,7 +380,11 @@ def main():
             options.features[(chrm, start, stop)] = Feature(80, sl[3:])
 
     if options.align != '-':
-        infile = open(options.align, 'r')
+        if options.bam_input:
+            infile_handle = subprocess.Popen([options.samtools, 'view', '-h', options.align], stdout=subprocess.PIPE)
+            infile = infile_handle.stdout
+        else:
+            infile = open(options.align, 'r')
     else:
         infile = sys.stdin
 
