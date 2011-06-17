@@ -1,4 +1,4 @@
-<tool id="SAFT" name="SAFT" version="2.0">
+<tool id="SAFT" name="SAFT" version="0.2">
   <description>Simple Alignment Filtering Tool</description>
   <command>
     ../optimal_filter.sh $anno_input_selected $sam_alignments $best_score $score_matrix $Filtered_Alignment 
@@ -89,17 +89,7 @@ sequences. GFF3 lines have nine tab-separated fields:
 8. phase - If the feature is a coding exon, frame should be a number between 0-2 that represents the reading frame of the first base. If the feature is not a coding exon, the value should be '.'.
 9. attributes - All lines with the same group are linked together into a single item.
 
-For the quantitation we provide two additional attributes:
-
-1. ARC: estimated average read coverage (direct output from rQuant)
-2. RPKM: the number of reads per thousand bases per million mapped reads
-
-describing the estimated expression value for each transcript.
-
 For more information see http://www.sequenceontology.org/gff3.shtml
-
-**AGS format** Annotation Gene Structure Object is an internal
-structure that efficiently stores the information from a GFF3 file.
 
 **SAM/BAM format** The Sequence Alignment/Map (SAM) format is a
 tab-limited text format that stores large nucleotide sequence
@@ -110,7 +100,7 @@ http://samtools.sourceforge.net/.
 
 ------
 
-Version 2.0 (June 2011)
+Version 0.2 (June 2011)
 
 </help>
 </tool>
