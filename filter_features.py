@@ -34,6 +34,7 @@ def parse_options(argv):
     optional.add_option('-X', '--max_mismatches', dest='max_mismatches', metavar='INT', type='int', help='maximum number of allowed mismathes [10000]', default=10000)
     optional.add_option('-m', '--min_support', dest='min_support', type='int', metavar='INT', help='minimum support for a feature to be counted [default 1]', default=1)
     optional.add_option('-M', '--max_intron_len', dest='max_intron_len', metavar='INT', type='int', help='maximal intron length [100000000]', default='100000000')
+    optional.add_option('-o', '--outfile', dest='outfile', metavar='FILE', help='outfile name - default: tagged infile name', default='-')
     optional.add_option('-v', '--verbose', dest='verbose', action='store_true', help='verbosity', default=False)
     parser.add_option_group(required)
     parser.add_option_group(optional)
@@ -51,19 +52,21 @@ def main():
 
     options = parse_options(sys.argv)
 
-    outfile_base = options.infile
-
     ### set filter tags for filenames
-    if options.min_exon_len > 0:
-        outfile_base += '_me%s' % options.min_exon_len
-    if options.max_mismatches < 10000:
-        outfile_base += '_mm%s' % options.max_mismatches
-    if options.max_intron_len < 100000000:
-        outfile_base += '_mi%s' % options.max_intron_len
-    if options.min_support > 1:
-        outfile_base += '_mc%s' % options.min_support
+    if options.outfile == '-':
+        outfile_base = options.infile
+        if options.min_exon_len > 0:
+            outfile_base += '_me%s' % options.min_exon_len
+        if options.max_mismatches < 10000:
+            outfile_base += '_mm%s' % options.max_mismatches
+        if options.max_intron_len < 100000000:
+            outfile_base += '_mi%s' % options.max_intron_len
+        if options.min_support > 1:
+            outfile_base += '_mc%s' % options.min_support
+        outfile_base = (re.sub('.features', '', outfile_base) + '.features')
+    else:
+        outfile_base = options.outfile
     
-    outfile_base = (re.sub('.features', '', outfile_base) + '.features')
     outfile = open(outfile_base, 'w')
 
     line_counter = 0
