@@ -2,7 +2,7 @@
   <description>Simple Alignment Filtering Tool</description>
   <command>
      /home/galaxy/galaxy-2.1.2009/tools/filters/SAFT/galaxy/optimal_filter_set_galaxy.sh $anno_input_selected $sam_alignments $best_score $score_matrix $Filtered_Alignment 
-    >> $Log_File
+    2> /dev/null >> $Log_File
   </command>
 
   <inputs>
@@ -12,7 +12,7 @@
   </inputs>
 
   <outputs>
-    <data format="sam" name="Filtered_Alignment" label="Optimally filtered output file"/>
+    <data format="bam" name="Filtered_Alignment" label="Optimally filtered output file"/>
     <data format="txt" name="best_score" label="Best Scorings"/>
     <data format="txt" name="score_matrix" label="Evaluated Filter Combinations"/>
     <data format="txt" name="Log_File" label="SAFT log file"/>
