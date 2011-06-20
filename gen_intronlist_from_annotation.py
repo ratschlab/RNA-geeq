@@ -87,7 +87,13 @@ def main():
     ### we sanitize the structure later on anyways
     for key in [source[0] for source in source_dict.keys() if source[1] in types]:
         taken_sources.add(key)
-    
+
+    ### try different type, if sources are empty    
+    if len(taken_sources) == 0:
+        types = ['CDS']
+        for key in [source[0] for source in source_dict.keys() if source[1] in types]:
+            taken_sources.add(key)
+
     ### print taken_sources
     if len(taken_sources) == 0:
         print >> sys.stderr, 'No suitable sources found!'
@@ -144,7 +150,14 @@ def main():
                             ### update intron lists
                             if contig_list[exon][1] - contig_list[exon + 1][0] == 0:
                                 continue
-                            assert(contig_list[exon][1] < contig_list[exon + 1][0])
+                            try:
+                                assert(contig_list[exon][1] < contig_list[exon + 1][0])
+                            except AssertionError:
+                                print >> sys.stderr, 'exon_1 %i, exon_2 %i' % (contig_list[exon][1], contig_list[exon + 1][0]) 
+                                print >> sys.stderr, contig_list[exon]
+                                print >> sys.stderr, contig_list[exon+1]
+                                print >> sys.stderr, exon
+                                sys.exit(-1)
                             ### for now strand information is only dummy
                             intron_lists[chrm][(0, contig_list[exon][1], contig_list[exon + 1][0])] = strand
                      
