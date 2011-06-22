@@ -20,7 +20,7 @@ then
 fi
 
 echo Downloading rQuant example data from FTP server ...
-wget -c ftp://ftp.tuebingen.mpg.de/fml/group_raetsch/software/SAFT/SAFT_examples.tar.gz
+wget -c ftp://ftp.tuebingen.mpg.de/fml/raetsch-lab/software/saft/SAFT_examples.tar.gz
 echo uncompressing ...
 tar -xzf SAFT_examples.tar.gz 
 mv SAFT_examples $DATA_DIR
