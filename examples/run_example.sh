@@ -66,7 +66,7 @@ echo
 SAFT_RES_DIR=$RESULTDIR
 mkdir -p $SAFT_RES_DIR
 
-OUT_BASE="${RES_DIR}/`basename $SAM_INPUT | sed -e \"s/.sam$//g\"`"
+OUT_BASE="${SAFT_RES_DIR}/`basename $SAM_INPUT | sed -e \"s/.sam$//g\"`"
 
 echo
 echo %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -79,7 +79,7 @@ echo ""
 
 if [ ! -f ${SAFT_RES_DIR}/`basename $GFF3_INPUT`.introns ]
 then
-    python gen_intronlist_from_annotation.py -v -a $GFF3_INPUT -o ${SAFT_RES_DIR}/`basename $GFF3_INPUT`.introns
+    python ../gen_intronlist_from_annotation.py -v -a $GFF3_INPUT -o ${SAFT_RES_DIR}/`basename $GFF3_INPUT`.introns
 fi
 
 echo "done"
@@ -94,7 +94,7 @@ echo
 
 if [ ! -f ${OUT_BASE}.features ]
 then
-    python get_intron_features.py -v -a $alignment -o ${OUT_BASE}.features
+    python ../get_intron_features.py -v -a $SAM_INPUT -o ${OUT_BASE}.features
 fi
 
 echo "done"
@@ -105,7 +105,7 @@ echo %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 echo % 3. Search for optimal filter setting %
 echo %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 echo 
-python find_optimal_param_set.py -v -i ${SAFT_RES_DIR}/`basename $GFF3_INPUT`.introns -f ${OUT_BASE}.features -b ${OUT_BASE}.best_score -m ${OUT_BASE}.scoring_matrix
+python ../find_optimal_param_set.py -v -i ${SAFT_RES_DIR}/`basename $GFF3_INPUT`.introns -f ${OUT_BASE}.features -b ${OUT_BASE}.best_score -m ${OUT_BASE}.scoring_matrix
 echo "done"
 echo ""
 
@@ -124,11 +124,11 @@ then
 
     if [ "$min_support" != "1" ]
     then
-        python filter_features.py -e $min_ex_len -X $max_mm -m $min_support -i ${OUT_BASE}.features -o ${OUT_BASE}.features_filtered
+        python ../filter_features.py -e $min_ex_len -X $max_mm -m $min_support -i ${OUT_BASE}.features -o ${OUT_BASE}.features_filtered
         support_string="-i ${OUT_BASE}.features_filtered"
     fi
 
-    python filter_alignment.py -a $SAM_INPUT -o ${OUT_BASE}.filtered.sam -e $min_ex_len -X $max_mm $support_string
+    python ../filter_alignment.py -a $SAM_INPUT -o ${OUT_BASE}.filtered.sam -e $min_ex_len -X $max_mm $support_string
     echo ""
 fi
 
