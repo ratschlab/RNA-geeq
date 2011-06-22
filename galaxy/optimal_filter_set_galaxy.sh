@@ -48,8 +48,8 @@ else
 fi
 
 SRC_DIR=".."
-export PYTHONPATH="$SRC_DIR/tools/:$PYTHONPATH"
 SAMTOOLS="/home/galaxy/software/samtools.svn/"
+export PYTHONPATH="$SRC_DIR/tools/:$PYTHONPATH"
 
 echo "Generating annotation intron list"
 echo ""
@@ -68,7 +68,7 @@ echo ""
 
 if [ ! -f ${alignment}.features ]
 then
-    python $SRC_DIR/get_intron_features.py -v -b -a $alignment -o ${alignment}.features -s $SAMTOOLS
+    python $SRC_DIR/get_intron_features.py -b -a $alignment -o ${alignment}.features -s $SAMTOOLS
 fi
 
 echo "done"
@@ -96,6 +96,8 @@ then
     fi
 
     python $SRC_DIR/filter_alignment.py -b -a $alignment -o $filter_out -e $min_ex_len -X $max_mm $support_string -s $SAMTOOLS
+
+    echo done
     echo ""
 fi
 
