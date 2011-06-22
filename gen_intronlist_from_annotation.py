@@ -48,17 +48,17 @@ def parse_options(argv):
     return (options, args)
 
 
-def fix_structure(trans_dict):
+def fix_structure(trans_dict, options):
     """Adapts the structure of the trans_dict to different gff-file structures"""
 
     for idx in range(len(trans_dict.features)):
         old_trans_dict = trans_dict.features[idx]
-        if trans_dict.features[idx].type == 'exon':
+        if trans_dict.features[idx].type == options.type:
             exon = trans_dict.features[idx]
             trans_dict.features[idx] = SeqFeature(exon.location, type = 'gene', strand = exon.strand, id = exon.id)
             trans_dict.features[idx].sub_features = [SeqFeature(exon.location, type = 'Transcript', strand = exon.strand, id = exon.id)] 
             trans_dict.features[idx].sub_features[0].sub_features = [exon]
-        elif len(trans_dict.features[idx].sub_features) > 0 and trans_dict.features[idx].sub_features[0].type == 'exon':
+        elif len(trans_dict.features[idx].sub_features) > 0 and trans_dict.features[idx].sub_features[0].type == options.type:
             exon = trans_dict.features[idx]
             trans_dict.features[idx] = SeqFeature(exon.location, type = 'gene', strand = exon.strand, id = exon.id)
             trans_dict.features[idx].sub_features = [exon]
@@ -80,7 +80,8 @@ def main():
     source_dict = examiner.available_limits(options.anno)['gff_source_type']
     taken_sources = set()
     #types = ['gene', 'mRNA', 'exon', 'CDS']
-    types = ['exon']
+    options.type = 'exon'
+    types = [options.type]
 
     ### parse only for exons and let the GFFparser 
     ### infer the respective parents (otherwise doubled entries occured)
@@ -90,7 +91,8 @@ def main():
 
     ### try different type, if sources are empty    
     if len(taken_sources) == 0:
-        types = ['CDS']
+        options.type = 'CDS'
+        types = [options.type]
         for key in [source[0] for source in source_dict.keys() if source[1] in types]:
             taken_sources.add(key)
 
@@ -133,11 +135,11 @@ def main():
         ### since we parse only one chromosome, this loop is evaluated only once
         for chrm in trans_dict.keys():
             ### verify/sanitize the created dictionairy
-            fix_structure(trans_dict[chrm])
+            fix_structure(trans_dict[chrm], options)
             intron_lists[chrm] = dict()
             for gene in trans_dict[chrm].features:
                 for trans in gene.sub_features:
-                    if trans.type == 'exon':
+                    if trans.type == options.type:
                         print "WARNING: Exon on transcript level:"
                         print trans
                         print 'will continue\n'
