@@ -16,7 +16,7 @@
 
 """
 
-import GFFParser
+import tools.GFFParser
 import cPickle
 import sys
 from Bio.SeqFeature import SeqFeature
