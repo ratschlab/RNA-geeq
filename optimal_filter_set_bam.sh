@@ -4,7 +4,7 @@ set -e
 
 if [ -z "$1" ]
 then
-    echo "usage: $0 <annotation in GFF3> <alignment in SAM> (<filter outfile>)')"
+    echo "usage: $0 <annotation in GFF3> <alignment in BAM> (<filter outfile>)')"
     echo ""
     echo "       if <filter outfile> is given, the optimal filter criteria will"
     echo "       be applied to the given alignment set and the result ist stored"
@@ -16,7 +16,7 @@ fi
 
 if [ -z "$2" ]
 then
-    echo "usage: $0 <annotation in GFF3> <alignment in SAM> (<filter outfile>)"
+    echo "usage: $0 <annotation in GFF3> <alignment in BAM> (<filter outfile>)"
     echo ""
     echo "       if <filter outfile> is given, the optimal filter criteria will"
     echo "       be applied to the given alignment set and the result ist stored"
@@ -27,6 +27,21 @@ else
 fi
 
 filter_out="$3"
+
+if [ -z "`which samtools`" ]
+then
+    SAMTOOLS=""
+else
+    SAMTOOLS="$(dirname$(which samtools))" 
+fi
+### to set a manual path to samtools uncomment following line:
+#SAMTOOLS="/path/to/samtools"
+
+if [ -z "$SAMTOOLS" ]
+then
+    echo "Please provide a version of SAMTools in your PATH or set the SAMTOOLS variable within $0"
+    exit 1
+fi
 
 echo "Generating annotation intron list"
 echo ""
@@ -45,7 +60,7 @@ echo ""
 
 if [ ! -f ${alignment}.features ]
 then
-    python get_intron_features.py -v -a $alignment -o ${alignment}.features
+    python get_intron_features.py -v -b -a $alignment -o ${alignment}.features -s $SAMTOOLS
 fi
 
 echo "done"
@@ -72,7 +87,7 @@ then
         support_string="-i ${alignment}.features_filtered"
     fi
 
-    python filter_alignment.py -a $alignment -o $filter_out -e $min_ex_len -X $max_mm $support_string
+    python filter_alignment.py -b -a $alignment -o $filter_out -e $min_ex_len -X $max_mm $support_string -s $SAMTOOLS
     echo ""
 fi
 
