@@ -8,7 +8,8 @@ This README file contains the following parts:
     1 Installation and Dependencies
     2 Description of the single tools
     3 Description of the pipeline
-    4 Examples
+    4 Example Pipelines
+    5 Example Data
 
 ================================================================================
 0 - Information about SAFT
@@ -18,7 +19,7 @@ SAFT is the abbreviation for Simple Alignment Filtering Tool and was developed
 by Andre Kahles at the Friedrich Miescher Laboratory of the Max Planck Society
 in 2010 and 2011.
 
-Version: 0.1 (alpha) - 2011.04.15
+Version: 0.3 (alpha) - 2011.07.07
 
 ================================================================================
 1 - Installation and Dependencies
@@ -147,7 +148,7 @@ to print the usage screen.
 2.4  - find_optimal_param_set.py
 --------------------------------
 
-This script performs an exhaustive search over the three parameters coordinates 
+This script performs an exhaustive search over the three parameter coordinates 
  * max mismatches           [0, 1, 2, 3, 4, 5, 6]
  * min segment length       [2, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
  * min intron read support  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -191,7 +192,7 @@ To find the optimal filter setting, you would need following pipeline:
 
 
 ================================================================================
-4 - Examples
+4 - Example Pipelines
 ================================================================================
 
 Example pipelines are provided as bash scripts and can be adapted.
@@ -201,4 +202,27 @@ Intron agreement evaluation:
 
 Find optimal filter setting:
     optimal_filter_set.sh
+
+================================================================================
+5 - Example Data
+================================================================================
+
+For testing purposes and to learn about the SAFT behviour, we provide a small of
+example data. For downloading the data please run the script get_data.sh in
+examples directory:
+
+    cd examples
+    ./get_data.sh
+
+This will download and unpack the data to a directory named "data" in the SAFT
+examples directory.
+
+To check if your installation is ready, you can start a small example script
+
+    cd examples
+    ./run_example.sh small
+
+To start a slightly bigger example run
+    ./run_example.sh big
+
 
