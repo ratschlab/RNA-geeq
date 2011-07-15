@@ -392,7 +392,9 @@ def main():
         if counter % 10000 == 0 and options.verbose:
             print >> sys.stderr, 'lines read: [ %s (taken: %s / filtered: %s)]' % (counter, counter - filter_counter, filter_counter)
         counter += 1
-
+        if line[0] == '@':
+            print >> outfile, line, 
+            continue
         sl = line.strip().split('\t')
         if len(sl) < 9:
             sl = line.strip().split(' ')
