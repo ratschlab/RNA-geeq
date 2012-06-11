@@ -58,9 +58,10 @@ def parse_options(argv):
     required.add_option('-a', '--alignment', dest='alignment', metavar='FILE', help='alignment file in sam format', default='-')
     required.add_option('-o', '--outfile', dest='outfile', metavar='FILE', help='intron feature file', default='-')
     optional = OptionGroup(parser, 'OPTIONAL')
-    optional.add_option('-b', '--bam_input', dest='bam_input', action='store_true', help='input has BAM format - does not work for STDIN', default=False)
-    optional.add_option('-s', '--samtools', dest='samtools', metavar='PATH', help='if SAMtools is not in your PATH, provide the right path here (only neccessary for BAM input)', default='')
-    optional.add_option('-v', '--verbose', dest='verbose', action='store_true', help='verbosity', default=False)
+    optional.add_option('-b', '--bam_input', dest='bam_input', action='store_true', help='input has BAM format - does not work for STDIN [off]', default=False)
+    optional.add_option('-s', '--samtools', dest='samtools', metavar='PATH', help='if SAMtools is not in your PATH, provide the right path here (only neccessary for BAM input)', default='samtools')
+    optional.add_option('-V', '--variants', dest='variants', action='store_true', help='use variants (requires flags XM and XG in SAM) [off]', default=False)
+    optional.add_option('-v', '--verbose', dest='verbose', action='store_true', help='verbosity [off]', default=False)
     parser.add_option_group(required)
     parser.add_option_group(optional)
 
@@ -93,9 +94,7 @@ def main():
 
     if options.bam_input:
         infile_handles = []
-        if options.samtools == '':
-            options.samtools = 'samtools'
-        else:
+        if options.samtools != 'samtools':
             options.samtools = '%s/samtools' % options.samtools
 
     if options.alignment == '-':
@@ -152,12 +151,21 @@ def main():
 
             mm = -1
             for tag in sl[11:]:
-                if tag[:2] == 'NM':
+                if options.variants:
+                    if mm == -1:
+                        mm += 1
+                    if tag[:2] in ['XM', 'XG']:
+                        mm += int(tag[5:])
+                elif tag[:2] == 'NM':
                     mm = int(tag[5:])
                     break
 
             if mm == -1:    
                 print >> sys.stderr, 'Mismatch information is missing in %s' % options.alignment
+                if options.variants:
+                    print >> sys.stderr, 'Alignment has to contain NM tag!'
+                else:
+                    print >> sys.stderr, 'Alignment has to contain tags XM and XG!'
                 sys.exit(-1)
 
             offset = 0

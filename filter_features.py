@@ -34,6 +34,7 @@ def parse_options(argv):
     optional.add_option('-X', '--max_mismatches', dest='max_mismatches', metavar='INT', type='int', help='maximum number of allowed mismathes [10000]', default=10000)
     optional.add_option('-m', '--min_support', dest='min_support', type='int', metavar='INT', help='minimum support for a feature to be counted [default 1]', default=1)
     optional.add_option('-M', '--max_intron_len', dest='max_intron_len', metavar='INT', type='int', help='maximal intron length [100000000]', default='100000000')
+    optional.add_option('-I', '--intron_features', dest='intron_features', metavar='FILE', help='other intron feature file - intersection is taken as filter', default='-')
     optional.add_option('-o', '--outfile', dest='outfile', metavar='FILE', help='outfile name - default: tagged infile name', default='-')
     optional.add_option('-v', '--verbose', dest='verbose', action='store_true', help='verbosity', default=False)
     parser.add_option_group(required)
@@ -63,10 +64,23 @@ def main():
             outfile_base += '_mi%s' % options.max_intron_len
         if options.min_support > 1:
             outfile_base += '_mc%s' % options.min_support
+        if options.intron_features != '-':
+            outfile_base += '_featFile'
         outfile_base = (re.sub('.features', '', outfile_base) + '.features')
     else:
         outfile_base = options.outfile
     
+    options.features = set()
+    if options.intron_features != '-':
+        line_counter = 0
+        for line in open(options.intron_features, 'r'):
+            if options.verbose and line_counter % 10000 == 0:
+                print 'parsed %i features from %s' % (line_counter, options.intron_features)
+            line_counter += 1
+            sl = line.strip().split('\t')
+            (chrm, start, stop) = sl[:3]
+            options.features.add((chrm, start, stop))
+
     outfile = open(outfile_base, 'w')
 
     line_counter = 0
@@ -81,6 +95,10 @@ def main():
             filter_counter += 1
             continue
 
+        if options.intron_features != '-':
+            if not (sl[0], sl[1], sl[2]) in options.features:
+                filter_counter += 1
+                continue
         if int(sl[3]) < options.min_support:
             filter_counter += 1
             continue

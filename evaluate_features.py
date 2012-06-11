@@ -242,10 +242,21 @@ def main():
     total_recall = float(0)
     key_count = 0
     for chrm in annotation_list.keys():
+        _chrm = 'None'
         if alignment_list.has_key(chrm):
-            matches = len(set(annotation_list[chrm].keys()).intersection(set(alignment_list[chrm].keys())))
+            _chrm = chrm
+        elif alignment_list.has_key('Chr' + chrm):
+            _chrm = 'Chr' + chrm
+        elif alignment_list.has_key('chr' + chrm):
+            _chrm = 'chr' + chrm
+        elif alignment_list.has_key(chrm.replace('Chr', '')):
+            _chrm = chrm.replace('Chr', '')
+        elif alignment_list.has_key(chrm.replace('chr', '')):
+            _chrm = chrm.replace('chr', '')
+        if _chrm != 'None':
+            matches = len(set(annotation_list[chrm].keys()).intersection(set(alignment_list[_chrm].keys())))
             _curr_recall = float(matches) / float(max(1, len(annotation_list[chrm].keys())))
-            _curr_precision = float(matches) / float(max(1, len(alignment_list[chrm].keys())))
+            _curr_precision = float(matches) / float(max(1, len(alignment_list[_chrm].keys())))
             _curr_fscore = (2 * _curr_precision * _curr_recall) / float(max(1, _curr_precision + _curr_recall))
             print '-----------------------------'
             print ' in Chromosome %s ' % chrm 
@@ -255,14 +266,14 @@ def main():
             print 'F-Score: %s' % _curr_fscore
             total_precision += _curr_precision
             total_recall += _curr_recall
-            non_matched[chrm] = set(alignment_list[chrm].keys()).difference(set(annotation_list[chrm].keys()))
+            non_matched[chrm] = set(alignment_list[_chrm].keys()).difference(set(annotation_list[chrm].keys()))
             ### do not include chromosomes with zero values into average
             if matches > 0:
                 key_count += 1
    
     total_precision /= max(1.0, float(key_count))
     total_recall /= max(1.0, float(key_count))
-    total_fscore = (2 * total_precision * total_recall) / float(max(1, total_precision + total_recall))
+    total_fscore = (2 * total_precision * total_recall) / float(max(0.0000001, total_precision + total_recall))
     print '-----------------------------'
     print ' average over all chromosomes '
     print '-----------------------------'
@@ -280,7 +291,18 @@ def main():
         _precision_line = ''
         _header_line = ''
         for chrm in annotation_list.keys():
+            _chrm = 'None'
             if alignment_list.has_key(chrm):
+                _chrm = chrm
+            elif alignment_list.has_key('Chr' + chrm):
+                _chrm = 'Chr' + chrm
+            elif alignment_list.has_key('chr' + chrm):
+                _chrm = 'chr' + chrm
+            elif alignment_list.has_key(chrm.replace('Chr', '')):
+                _chrm = chrm.replace('Chr', '')
+            elif alignment_list.has_key(chrm.replace('chr', '')):
+                _chrm = chrm.replace('chr', '')
+            if _chrm != 'None':
                 matches = len(set(annotation_list[chrm].keys()).intersection(set(alignment_list[chrm].keys())))
                 _header_line += (str(chrm) + '\t')
                 _recall_line += (str(float(matches) / float(max(1, len(annotation_list[chrm].keys())))) + '\t')

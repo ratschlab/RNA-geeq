@@ -82,7 +82,7 @@ def parse_options(argv):
     parser = OptionParser()
     io_opts = OptionGroup(parser, 'I/O OPTIONS')
     io_opts.add_option('-a', '--alignment', dest='align', metavar='FILE', help='alignment file in sam format (- for stdin)', default='-')
-    io_opts.add_option('-o', '--outfile', dest='outfile', metavar='FILE', help='outfile - default is tagged infile or stdout for stdin processing', default='')
+    io_opts.add_option('-o', '--outfile', dest='outfile', metavar='FILE', help='outfile - default is tagged infile or stdout for stdin processing', default='-')
     io_opts.add_option('-b', '--bam_input', dest='bam_input', action='store_true', help='input has BAM format - does not work for STDIN', default=False)
     io_opts.add_option('-s', '--samtools', dest='samtools', metavar='PATH', help='if SAMtools is not in your PATH, provide the right path here (only neccessary for BAM input)', default='')
     filter_crit = OptionGroup(parser, 'FILTER CRITERIA')
@@ -90,6 +90,7 @@ def parse_options(argv):
     filter_crit.add_option('-M', '--max_intron_len', dest='max_intron_len', metavar='INT', type='int', help='maximal intron length [100000000]', default='100000000')
     filter_crit.add_option('-e', '--min_exon_len', dest='min_exon_len', metavar='INT', type='int', help='minimal exon length [0]', default=0)
     filter_crit.add_option('-X', '--max_mismatches', dest='max_mismatches', metavar='INT', type='int', help='maximum number of allowed mismathes [10000]', default=10000)
+    filter_crit.add_option('-V', '--variants', dest='variants', action='store_true', help='use variant tags XM and XG for mismatch filtering [off]', default=False)
     filter_crit.add_option('-i', '--intron_features', dest='intron_features', metavar='FILE', help='intron features file - only spliced reads present in this file are kept', default='-')
     filter_crit.add_option('-c', '--clip_filter', dest='clip_filter', action='store_true', help='filters clipped reads', default=False)
     filter_hand = OptionGroup(parser, 'FILTER HANDLING')
@@ -99,7 +100,7 @@ def parse_options(argv):
         help='if suboptimal spliced alignments occur and a batter alignment is available, keep only the best alignment. File must be sorted by read id and flag', default=False)
     filter_hand.add_option('-w', '--window', dest='window', metavar='INT', type='int', help='size of overlap-window to count suboptimal alignments as one stratum [2]', default=2)
     others = OptionGroup(parser, 'OTHERS')
-    others.add_option('-v', '--verbose', dest='verbose', action='store_true', help='verbosity', default=False)
+    others.add_option('-v', '--verbose', dest='verbose', action='store_true', help='verbosity [off]', default=False)
     parser.add_option_group(io_opts)
     parser.add_option_group(filter_crit)
     parser.add_option_group(filter_hand)
@@ -120,14 +121,19 @@ def filter_lines_by_criteria(curr_lines, multireads, options, filter_counter):
     _curr_lines = []
 
     for sl in curr_lines:
-        mm = None 
+        mm = -1 
         if options.del_worse:
             try:
                 for opt in sl[11:]:
-                    if opt[:3] == 'NM:':
+                    if options.variants and opt[:3] in ['XG:', 'XM:']:
+                        if mm == -1:
+                            mm = int(opt[5:])
+                        else:
+                            mm += int(opt[5:])
+                    if not options.variants and opt[:3] == 'NM:':
                         mm = int(opt[5:])
                         break
-                if mm == None:
+                if mm == -1:
                     print >> sys.stderr, 'No mismatch information available or read string missing in %s' % options.align
                     sys.exit(1)
             except IndexError:
@@ -150,13 +156,13 @@ def filter_lines_by_criteria(curr_lines, multireads, options, filter_counter):
                         break
             if cont_flag:
                 filter_counter += 1
-                if mm != None:
+                if mm != -1:
                     min_mm = min(mm, min_mm)
                 continue
 
         if (sl[0], int(sl[1]) & 196) in multireads:
             filter_counter += 1
-            if mm != None:
+            if mm != -1:
                 min_mm = min(mm, min_mm)
             continue
 
@@ -164,18 +170,23 @@ def filter_lines_by_criteria(curr_lines, multireads, options, filter_counter):
             cont_flag = False
             if options.del_worse and mm > options.max_mismatches:
                 filter_counter += 1
-                if mm != None:
+                if mm != -1:
                     min_mm = min(mm, min_mm)
                 continue
             else:
                 try:
+                    _mm = 0
                     for opt in sl[11:]:
-                        if (opt[:3] == 'NM:' and int(opt[5:]) > options.max_mismatches):
+                        if options.variants and opt[:3] in ['XM:', 'XG:']:
+                            _mm += int(opt[5:])        
+                        elif (not options.variants) and (opt[:3] == 'NM:'):
+                            _mm += int(opt[5:])
+                        if _mm > options.max_mismatches:
                             cont_flag = True
                             break
                     if cont_flag:
                         filter_counter += 1
-                        if mm != None:
+                        if mm != -1:
                             min_mm = min(mm, min_mm)
                         continue
                 except IndexError:
@@ -192,7 +203,7 @@ def filter_lines_by_criteria(curr_lines, multireads, options, filter_counter):
                     break
             if cont_flag:
                 filter_counter += 1
-                if mm != None:
+                if mm != -1:
                     min_mm = min(mm, min_mm)
                 continue
 
@@ -207,13 +218,13 @@ def filter_lines_by_criteria(curr_lines, multireads, options, filter_counter):
                     break
             if cont_flag:
                 filter_counter += 1
-                if mm != None:
+                if mm != -1:
                     min_mm = min(mm, min_mm)
                 continue
 
         if options.clip_filter and (sl[5].find('H') > -1 or sl[5].find('S') > -1):
             filter_counter += 1
-            if mm != None:
+            if mm != -1:
                 min_mm = min(mm, min_mm)
             continue
 
@@ -221,13 +232,16 @@ def filter_lines_by_criteria(curr_lines, multireads, options, filter_counter):
 
     return (min_mm, _curr_lines, filter_counter)
 
-def filter_lines_by_min_mm(curr_lines, min_mm, filter_counter):
+def filter_lines_by_min_mm(curr_lines, min_mm, filter_counter, options):
     """Filters the given lines by given number of max mismatches """
     
     _curr_lines = []
+    mm = 0
     for sl in curr_lines:
         for opt in sl[11:]:
-            if opt[:3] == 'NM:':
+            if options.variants and opt[:3] in ['XG:', 'XM:']:
+                mm += int(opt[5:])
+            if not options.variants and opt[:3] == 'NM:':
                 mm = int(opt[5:])
                 break
 
@@ -240,7 +254,6 @@ def filter_lines_by_min_mm(curr_lines, min_mm, filter_counter):
 
 def filter_suboptimal(curr_lines, filter_counter, options):
     """Removes suboptimal spliced alignments, iff better alignment exists."""
-    
 
     ### check, if QPALMA Score is available
     have_spliced = False
@@ -308,8 +321,8 @@ def main():
     multireads = set()
     if options.multireads != '-':
         multireads = []
-        print '\nParsing multireads from file %s' % options.multireads
-        print '-----------------------------------------'
+        print >> sys.stderr, '\nParsing multireads from file %s' % options.multireads
+        print >> sys.stderr, '-----------------------------------------'
         for line in open(options.multireads, 'r'):
             try:
                 _l = line.strip().split('\t')
@@ -327,7 +340,7 @@ def main():
         else:
             options.samtools = '%s/samtools' % options.samtools
 
-    if options.outfile == '':
+    if options.outfile == '-':
         if options.align != '-':
             outfile_base = options.align
 
@@ -346,6 +359,8 @@ def main():
                 outfile_base += '_noSubopt'
             if options.del_worse:
                 outfile_base += '_dW'
+            if options.variants:
+                outfile_base += '_variant'
             if options.intron_features != '-':
                 outfile_base += '_featFile'
             
@@ -373,7 +388,7 @@ def main():
         line_counter = 0
         for line in open(options.intron_features, 'r'):
             if options.verbose and line_counter % 10000 == 0:
-                print 'parsed %i features from %s' % (line_counter, options.intron_features)
+                print >> sys.stderr, 'parsed %i features from %s' % (line_counter, options.intron_features)
             line_counter += 1
             sl = line.strip().split('\t')
             (chrm, start, stop) = sl[:3]
@@ -389,7 +404,7 @@ def main():
         infile = sys.stdin
 
     for line in infile:
-        if counter % 10000 == 0 and options.verbose:
+        if counter % 1000000 == 0 and options.verbose:
             print >> sys.stderr, 'lines read: [ %s (taken: %s / filtered: %s)]' % (counter, counter - filter_counter, filter_counter)
         counter += 1
         if line[0] == '@':
@@ -423,7 +438,7 @@ def main():
         (min_mm, curr_lines, filter_counter) = filter_lines_by_criteria(curr_lines, multireads, options, filter_counter)
 
         if options.del_worse:
-            (curr_lines, filter_counter) = filter_lines_by_min_mm(curr_lines, min_mm, filter_counter)
+            (curr_lines, filter_counter) = filter_lines_by_min_mm(curr_lines, min_mm, filter_counter, options)
         
         for _sl in curr_lines:
             _line = ''
@@ -443,7 +458,7 @@ def main():
         (min_mm, curr_lines, filter_counter) = filter_lines_by_criteria(curr_lines, multireads, options, filter_counter)
 
         if options.del_worse:
-            (curr_lines, filter_counter) = filter_lines_by_min_mm(curr_lines, min_mm, filter_counter)
+            (curr_lines, filter_counter) = filter_lines_by_min_mm(curr_lines, min_mm, filter_counter, options)
 
         for sl in curr_lines:
             _line = ''

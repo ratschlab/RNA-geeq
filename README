@@ -201,7 +201,8 @@ Intron agreement evaluation:
     evaluate_alignment.sh
 
 Find optimal filter setting:
-    optimal_filter_set.sh
+    optimal_filter_set.sh (SAM Format)
+    optimal_filter_set_bam.sh (BAM Format)
 
 ================================================================================
 5 - Example Data
