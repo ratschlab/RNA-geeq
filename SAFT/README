@@ -40,7 +40,7 @@ You can download SAMtools from http://samtools.sourceforge.net/
 SAFT
 ----
 To install SAFT, download the latest archive from
-http://www.fml.mpg.de/raetsch/suppl/srm-eval/SAFT
+http://www.raetschlab.org/suppl/srm-eval/SAFT
 
 Move the archive to a place of choice and unpack it. The directory
 SAFT-{VERSION} will be automatically created.
