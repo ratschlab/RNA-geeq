@@ -41,6 +41,7 @@ SAFT
 ----
 To install SAFT, download the latest archive from
 http://www.raetschlab.org/suppl/srm-eval/SAFT
+http:/bioweb.me/rnageeq
 
 Move the archive to a place of choice and unpack it. The directory
 SAFT-{VERSION} will be automatically created.
