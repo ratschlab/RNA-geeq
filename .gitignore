@@ -1,1 +1,4 @@
 *~
+*.bam
+*.sam
+*.bam.bai
