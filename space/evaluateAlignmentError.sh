@@ -1,11 +1,11 @@
-#!/bin/sh
+#!/bin/bash
 
 set -e
 
 # IN-FILES
 if [ -z "$1" ]
 then
-    echo usage $0 \<alignment\> \<genome_fasta\> \<output_file\>
+    echo "usage: $0 <alignment> <genome_fasta> <output_file>"
     exit 2
 else
     alignment=$1
@@ -13,7 +13,7 @@ fi
 
 if [ -z "$2" ]
 then
-    echo usage $0 \<alignment\> \<genome_fasta\> \<output_file\>
+    echo "usage: $0 <alignment> <genome_fasta> <output_file>"
     exit 2
 else
     genome_fasta=$2
@@ -22,14 +22,14 @@ fi
 # OUT-FILES
 if [ -z "$3" ]
 then
-    echo usage $0 \<alignment\> \<genome_fasta\> \<output_file\>
+    echo "usage: $0 <alignment> <genome_fasta> <output_file>"
     exit 2
 else
     outfile=$3
 fi
 
 # INTERMEDIATE-FILES
-tmpoutdir=`mktemp -d` || exit 1
+tmpoutdir=`mktemp -d` || (echo "Could not create temporary file" && exit 1)
 
 # Check for genome_config
 if [ ! -d "$tmpoutdir/genome" ];
@@ -48,4 +48,6 @@ python evaluateAlignmentError.py -a $alignment -g $genome_config -H $outfile
 echo ""
 
 # Clean up
+echo "Cleaning up ..."
 rm -r $tmpoutdir
+echo "... done"
