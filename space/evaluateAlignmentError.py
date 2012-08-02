@@ -1,8 +1,25 @@
-"""This script evaluates the error distribution in a given error model"""
+"""
+
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 3 of the License, or
+  (at your option) any later version.
+  
+  Written (W) 2009-2010 Andre Kahles
+  Copyright (C) 2009-2010 by Friedrich Miescher Laboratory, Tuebingen, Germany
+  
+  This program evaluates the error distribution in a given error model
+  
+  For detailed usage information type:
+
+    python evaluateAlignmentError.py 
+
+"""
 
 import sys
 import genome_utils
 import re
+import subprocess
 
 def parse_options(argv):
 
@@ -31,7 +48,7 @@ def parse_options(argv):
     return options
 
 def read_alignment(options):
-    """Extracts quality und substitutions information from an alignment given in bed-format """
+    """Extracts quality und substitutions information from an alignment given in different alignment formats"""
     qualities = dict()
     substitutions = dict()
     quality_per_pos = dict()
@@ -42,13 +59,18 @@ def read_alignment(options):
         print >> sys.stderr, 'Please specify a genome information object to complete information missing in the SAM file - option -g'
         sys.exit(-1)
 
-
     if options.gio_file != '-':
         gio = genome_utils.GenomeInfo(options.gio_file)
         gio.contig_names.sort()
         genome = dict()
 
-    for line in open(options.alignment, 'r'):
+    if options.format != 'bam':
+        infile = open(options.alignment, 'r')
+    else:
+        infile_handle = subprocess.Popen([options.samtools, 'view', inf], stdout=subprocess.PIPE)
+        infile = infile_handle.stdout
+
+    for line in infile:
         if line[0] == '#':
             continue
         line_counter += 1
@@ -58,7 +80,7 @@ def read_alignment(options):
                 continue
             read = sl[12]
             quality = sl[13]
-        elif options.format == 'sam':
+        elif options.format in ['sam', 'bam']:
             if len(sl) < 9:
                 continue
 
@@ -156,6 +178,9 @@ def read_alignment(options):
                     quality_per_pos[q][quality[q]] = 1
                 except KeyError:
                     quality_per_pos[q] = {quality[q]:1}
+
+    if options.format == 'bam':
+        infile_handle.kill()
 
     ### average quality values
     for key in avg_quality_per_pos.keys():
@@ -299,7 +324,6 @@ def plot_histograms(options, qualities, substitutions, quality_per_pos, avg_qual
 
     plot_tmp.close()
     subprocess.call(['gnuplot', plot_tmp_name])
-    #print plot_tmp_name
     os.remove(plot_tmp_name)
 
 
