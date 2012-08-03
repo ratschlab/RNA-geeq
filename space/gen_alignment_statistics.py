@@ -2,6 +2,7 @@
 import sys
 import re
 import cPickle
+import subprocess
 
 def parse_options(argv):
 
@@ -11,7 +12,7 @@ def parse_options(argv):
 
     parser = OptionParser()
     required = OptionGroup(parser, 'REQUIRED')
-    required.add_option('-a', '--alignment', dest='align', metavar='FILE', help='alignment file in sam format', default='-')
+    required.add_option('-a', '--alignment', dest='align', metavar='FILE', help='alignment file in BAM  (default) or SAM (-S) format', default='-')
     optional = OptionGroup(parser, 'OPTIONAL')
     optional.add_option('-R', '--ignore_multireads', dest='multireads', metavar='FILE', help='file containing the multireads to ignore', default='-')
     optional.add_option('-g', '--genome', dest='genome_fasta', metavar='FILE1[,FILE2, ...]', help='Genome sequence as fasta file(s) ', default='-')
@@ -19,6 +20,8 @@ def parse_options(argv):
     optional.add_option('-X', '--max_mismatches', dest='max_mismatches', metavar='INT', type='int', help='maximum number of allowed mismathes [unlimited]', default=-1)
     optional.add_option('-v', '--verbose', dest='verbose', action='store_true', help='verbosity', default='0')
     optional.add_option('-o', '--outfile_base', dest='outfile_base', metavar='PATH', help='basedir for outfiles written', default='-')
+    optional.add_option('-s', '--samtools_path', dest='samtools', metavar='PATH', help='absolute path to samtools, if not in PATH', default='samtools')
+    optional.add_option('-S', '--SAM', dest='sam', action='store_true', help='input alignment is in SAM format [off]', default=False)
     optional.add_option('-M', '--max_intron_len', dest='max_intron_len', metavar='INT', type='int', help='maximal intron length [unlimited]', default=-1)
     parser.add_option_group(required)
     parser.add_option_group(optional)
@@ -64,8 +67,8 @@ def main():
     options = parse_options(sys.argv)
 
     ### initializations
-    number_of_exons = dict()
-    intron_pos = dict()
+    number_of_exons = []
+    intron_pos = []
     unspliced = 0
     readlen = 0
 
@@ -93,10 +96,10 @@ def main():
             _l = line.strip().split('\t')
             multireads.add((_l[0], int(_l[1])))
 
-    mismatches = dict()
-    deletions = dict()
-    insertions = dict()
-    qualities = dict()
+    mismatches = []
+    deletions = []
+    insertions = []
+    qualities = []
 
     if options.align == '-':    
         infile = sys.stdin
@@ -104,7 +107,8 @@ def main():
         if options.sam:
             infile = open(options.align, 'r')
         else:
-            #TODO call samtools subprocess to read bam file
+            file_handle = subprocess.Popen([options.samtools, 'view', options.align], stdout=subprocess.PIPE) 
+            infile = file_handle.stdout
 
     for line in infile:
         if line[0] in ['@', '#' ] or line[:2] == 'SQ':
@@ -136,7 +140,7 @@ def main():
                 if cont_flag:
                     filter_counter += 1
                     continue
-            except:
+            except KeyError:
                 print >> sys.stderr, 'No mismatch information available or read string missing in %s' % options.align
                 sys.exit(1)
 
@@ -166,10 +170,12 @@ def main():
                 continue
 
         ### count exons / segments in read
+        idx = sl[5].count('N') + 1
         try:
-            number_of_exons[sl[5].count('N') + 1] += 1
-        except KeyError:
-            number_of_exons[sl[5].count('N') + 1] = 1
+            number_of_exons[idx] += 1
+        except IndexError:
+            number_of_exons.extend([0] * (idx - len(number_of_exons) - 1))
+            number_of_exons.append(1)
 
         ### check, if read is reversed -> must change coordinates
         if (int(sl[1]) & 16) == 16:
@@ -192,10 +198,12 @@ def main():
             ### determine intron position (always position of the FIRST intron)
             ### in case of alignment to minus strand position is reversed
             exon_len = sum([int(i) for i in exon_list[:-1]])
+            idx = abs(_reversed - exon_len)
             try:
-                intron_pos[abs(_reversed - exon_len)] += 1
-            except KeyError:
-                intron_pos[abs(_reversed - exon_len)] = 1
+                intron_pos[idx] += 1
+            except IndexError:
+                intron_pos.extend([0] * (idx - len(intron_pos) - 1))
+                intron_pos.append(1)
     
         ### build up mismatch-statistics 
         if options.genome_fasta != '-':
@@ -223,26 +231,32 @@ def main():
                             broken = True
                             break
                         if gen[p] != read[read_pos + p]:
+                            idx = abs(_reversed - (hardclipped_read_pos + read_pos + p))
                             try:
-                                mismatches[abs(_reversed - (hardclipped_read_pos + read_pos + p))] += 1
-                            except KeyError:
-                                mismatches[abs(_reversed - (hardclipped_read_pos + read_pos + p))] = 1
+                                mismatches[idx] += 1
+                            except IndexError:
+                                mismatches.extend([0] * (idx - len(mismatches) - 1))
+                                mismatches.append(1)
                     if broken:
                         break
                     chrm_pos += size[pos]
                     read_pos += size[pos]
                 elif op[pos] == 'I': # insertions
                     for _p in range(size[pos]):
+                        idx = abs(_reversed - (read_pos + _p + hardclipped_read_pos))
                         try:
-                            insertions[abs(_reversed - (read_pos + _p + hardclipped_read_pos))] += 1
+                            insertions[idx] += 1
                         except KeyError:
-                            insertions[abs(_reversed - (read_pos + _p + hardclipped_read_pos))] = 1
+                            insertions.extend([0] * (idx - len(insertions) - 1))
+                            insertions.append(1)
                     read_pos += size[pos]
                 elif op[pos] == 'D': # deletions
+                    idx = abs(_reversed - read_pos - hardclipped_read_pos)
                     try:
-                        deletions[abs(_reversed - read_pos - hardclipped_read_pos)] += 1 # count only one deletion, not depending on number of positions deleted. ...size[pos]
+                        deletions[idx] += 1  # count only one deletion, not depending on number of positions deleted. ...size[pos]
                     except KeyError:
-                        deletions[abs(_reversed - read_pos - hardclipped_read_pos)] = 1 #size[pos]
+                        deletions.extend([0] * (idx - len(deletions) - 1))
+                        deletions.append(1) # size [pos]
                     chrm_pos += size[pos]
                 elif op[pos] == 'N': # introns
                     chrm_pos += size[pos]
@@ -255,53 +269,12 @@ def main():
         ### build up quality distribution
         if len(sl) > 10 and sl[10] != '*':
             for _p in sl[10]:
+                idx = ord(_p)
                 try:
-                    qualities[ord(_p)] += 1
-                except KeyError:
-                    qualities[ord(_p)] = 1
-
-    #max_len = max([76, len(mismatches.keys()), len(insertions.keys()), len(deletions.keys()), len(qualities.keys())])
-
-    if len(mismatches.keys()) == 0:
-        mismatches = dict()
-        for i in range(max_len):
-            mismatches[i] = 0
-    elif len(mismatches.keys()) < max_len:
-        for i in range(1, max_len + 1):
-            if not mismatches.has_key(i):
-                mismatches[i] = 0
-    if len(insertions.keys()) == 0:
-        insertions = dict()
-        for i in range(max_len):
-            insertions[i] = 0
-    elif len(insertions.keys()) < max_len:
-        for i in range(1, max_len + 1):
-            if not insertions.has_key(i):
-                insertions[i] = 0
-    if len(deletions.keys()) == 0:
-        deletions = dict()
-        for i in range(max_len):
-            deletions[i] = 0
-    elif len(deletions.keys()) < max_len:
-        for i in range(1, max_len + 1):
-            if not deletions.has_key(i):
-                deletions[i] = 0
-    if len(intron_pos.keys()) == 0:
-        intron_pos = dict()
-        for i in range(max_len):
-            intron_pos[i] = 0
-    elif len(intron_pos.keys()) < max_len:
-        for i in range(1, max_len + 1):
-            if not intron_pos.has_key(i):
-                intron_pos[i] = 0
-    if len(qualities.keys()) == 0:
-        qualities = dict()
-        for i in range(max_len):
-            qualities[i] = 0
-    elif len(qualities.keys()) < max_len:
-        for i in range(1, max_len + 1):
-            if not qualities.has_key(i):
-                qualities[i] = 0
+                    qualities[idx] += 1
+                except IndexError:
+                    qualities.extend([0] * (idx - len(qualities) - 1))
+                    qualities.append(1)
 
     import matplotlib.pyplot as plt
     plt.figure(1)
@@ -309,41 +282,44 @@ def main():
     plt.title('Intron position distribution')
     plt.xlabel('read position')
     plt.ylabel('occurrences')
+    plt.show()
     plt.figure(2)
     plt.plot(number_of_exons) ## --> make box plot
     plt.title('Number of exons')
     plt.xlabel('number of exons')
     plt.ylabel('occurrences')
+    plt.show()
     plt.figure(3)
     plt.plot(mismatches)
     plt.title('Positional mismatch distribution')
     plt.xlabel('read position')
     plt.ylabel('occurrences')
+    plt.show()
     plt.figure(4)
     plt.plot(insertions)
     plt.title('Positional insertion distribution')
     plt.xlabel('read position')
     plt.ylabel('occurrences')
+    plt.show()
     plt.figure(5)
     plt.plot(deletions)
     plt.title('Positional deletion distribution')
     plt.xlabel('read position')
     plt.ylabel('occurrences')
+    plt.show()
     plt.figure(6)
     plt.plot(qualities)
     plt.title('Quality distribution')
     plt.xlabel('phred score')
     plt.ylabel('occurrences')
+    plt.show()
     print 'number of exons: \n%s' % str(number_of_exons)
     print '%s reads were unspliced' % unspliced
 
-    if options.readfile != '-':
-        fastq.close()
-
     ### write plotlists to file, for later evaluation
     ### TODO dump all statistics as binary pickle
-    plot_out = (outfile_base + '.statistics.plotlist')
-    cPickle.dump(plotlist, open(plot_out, 'w'))
+    #plot_out = (outfile_base + '.statistics.plotlist')
+    #cPickle.dump(plotlist, open(plot_out, 'w'))
  
 if __name__ == '__main__':
     main()
