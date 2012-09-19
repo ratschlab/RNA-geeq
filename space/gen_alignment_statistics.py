@@ -40,6 +40,8 @@ def read_fasta(infiles):
 
     if infiles.count(',') > 0:
         infiles = infiles.split(',')
+    else:
+        infiles = [infiles]
 
     genome = dict()
     curr_chr = ''
@@ -52,7 +54,7 @@ def read_fasta(infiles):
                 continue
 
             if curr_chr != '':
-                genome[curr_chr].append(line.strip().lower())
+                genome[curr_chr] += line.strip().lower()
             else:
                 print >> sys.stderr, "File in %s has no valid Fasta format!\n" % infile
                 exit(-1)

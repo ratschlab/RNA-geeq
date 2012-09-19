@@ -1,8 +1,9 @@
-"""This script compares an alignment to the annotation. """
+"""This script compares an alignment junction list to annotated junctions. """
 
 import cPickle
 import sys
 import re
+import subprocess
 import plot
 
 def parse_options(argv):
@@ -20,6 +21,7 @@ def parse_options(argv):
     optional = OptionGroup(parser, 'OPTIONAL')
     optional.add_option('-a', '--alignment', dest='align', metavar='FILE', help='alignment file in sam format - can be given instead of alignment intron file', default='-')
     optional.add_option('-S', '--store', dest='store', action='store_true', help='stores generated intron lists and coverage maps', default=False)
+    optional.add_option('-s', '--sam', dest='sam', action='store_true', help='input alignment is in sam format not in bam', default=False)
     optional.add_option('-F', '--full_analysis', dest='full_analysis', action='store_true', help='generates overlap and coverage plots', default=False)
     optional.add_option('-s', '--strand_specific', dest='strand_specific', action='store_true', help='data is strand specific', default=False)
     optional.add_option('-R', '--ignore_multireads', dest='multireads', metavar='FILE', help='file containing the multireads to ignore', default='-')
@@ -60,14 +62,24 @@ def print_to_datafile(data, file):
 def build_intron_list(options, multireads):
     """Builds up an intron list from the given alignment and writes it to a file. Returns a map of all covered intron positions """
 
-    ### parse sam:
+    ### parse SAM/BAM:
     ### 0      1     2       3             4     5      6        7        8       9    10    11
     ### QUERY  FLAG  REFSEQ  POS(1-based)  MAPQ  CIGAR  MATEREF  MATEPOS  INSIZE  SEQ  QUAL  OPT
     intron_lists = dict()
     cov_map = dict()
     counter = 0
     filter_counter = 0
-    for line in open(options.align):
+
+    if options.align == '-':    
+        infile = sys.stdin
+    else:
+        if options.sam:
+            infile = open(options.align, 'r')
+        else:
+            file_handle = subprocess.Popen([options.samtools, 'view', options.align], stdout=subprocess.PIPE) 
+            infile = file_handle.stdout
+
+    for line in infile:
         if line[0] in ['@', '#'] or line[:2] == 'SQ':
             continue
         if counter % 10000 == 0 and options.verbose:
@@ -84,8 +96,7 @@ def build_intron_list(options, multireads):
             cont_flag = False
             try:
                 for opt in sl[11:]:
-                    if (opt[:3] == 'NM:' and int(opt[5:]) > options.max_mismatches) or \
-                      opt[:3] == 'H0:' and  len(sl[9]) - int(opt[5:]) > options.max_mismatches:
+                    if (opt[:3] == 'NM:' and int(opt[5:]) > options.max_mismatches):
                         cont_flag = True
                         break
                 if cont_flag:
@@ -106,11 +117,6 @@ def build_intron_list(options, multireads):
             if cont_flag:
                 filter_counter += 1
                 continue
-
-        ### sanitize chr-name
-        sl[2] = re.sub('chr', '', sl[2])
-        if sl[2] == 'M':
-            sl[2] = 'MtDNA'
 
         if not cov_map.has_key(sl[2]):
             cov_map[sl[2]] = dict()
@@ -605,7 +611,6 @@ def main():
     
     annotation_list = cPickle.load(open(options.anno_int, 'r'))
 
-
     ### filter annotated and predicted introns for excluded chromosomes
     if options.exclude_chrm != '-':
         _ex_chrm = options.exclude_chrm.strip().split(',')
@@ -758,6 +763,4 @@ def main():
         cPickle.dump(plotlist, open(plot_out, 'w'))
     
 if __name__ == '__main__':
-    #import cProfile
-    #cProfile.run("main()", "compare_intron_lists_new.profile")
     main()

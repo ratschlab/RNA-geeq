@@ -2,3 +2,4 @@
 *.bam
 *.sam
 *.bam.bai
+*.log

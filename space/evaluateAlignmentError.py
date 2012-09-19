@@ -7,7 +7,6 @@
   
   Written (W) 2009-2010 Andre Kahles
   Copyright (C) 2009-2010 by Friedrich Miescher Laboratory, Tuebingen, Germany
-  
   This program evaluates the error distribution in a given error model
   
   For detailed usage information type:
@@ -17,7 +16,6 @@
 """
 
 import sys
-import genome_utils
 import re
 import subprocess
 
@@ -32,9 +30,11 @@ def parse_options(argv):
     required.add_option('-a', '--alignment', dest='alignment', metavar='FILE', help='alignment file', default='-')
     required.add_option('-H', '--histogram', dest='histogram', metavar='PATH', help='print error histograms to PATH ', default='-')
     optional = OptionGroup(parser, 'OPTIONAL')
+    optional.add_option('-s', '--samtools', dest='samtools', metavar='STRING', help='location of samtools on the system', default='samtools')
     optional.add_option('-f', '--format', dest='format', metavar='STRING', help='alignment file format sam or bed [default: sam]', default='sam')
-    optional.add_option('-g', '--genome', dest='gio_file', metavar='FILE', help='Genome information object', default='-')
-#    optional.add_option('-O', '--output', dest='outputfile', metavar='FILE', help='file to store the evaluation output', default='-')
+    optional.add_option('-g', '--genome', dest='genome', metavar='FILE', help='Genome sequence in FASTA format', default='-')
+    optional.add_option('-x', '--use-x', dest='x', action='store_true', help='Use X output [off]', default=False)
+    optional.add_option('-v', '--verbose', dest='verbose', action='store_true', help='Set verbose output [off]', default=False)
     
     parser.add_option_group(required)
     parser.add_option_group(optional)
@@ -47,34 +47,73 @@ def parse_options(argv):
 
     return options
 
-def read_alignment(options):
-    """Extracts quality und substitutions information from an alignment given in different alignment formats"""
+def read_fasta(options):
+
+    """Parses genome information from infiles in fasta-format"""
+
+    if options.genome.count(',') > 0:
+        infiles = options.genome.split(',')
+    else:
+        infiles = [options.genome]
+
+    genome = dict()
+    curr_chr = ''
+    for infile in infiles:
+        if options.verbose:
+            print >> sys.stdout, 'Processing %s' % infile
+        for line in open(infile, 'r'):
+            if line[0] == '>':
+                chr_name = line.strip()[1:]
+                genome[chr_name] = []
+                curr_chr = chr_name
+                if options.verbose:
+                    print >> sys.stdout, '... reading %s' % curr_chr
+                continue
+
+            if curr_chr != '':
+                genome[curr_chr].append(line.strip().lower())
+            else:
+                print >> sys.stderr, "File in %s has no valid Fasta format!\n" % infile
+                exit(-1)
+                
+    ### doing it that way is apparently the fastest solution
+    for chrm in genome.keys():
+        genome[chrm] = ''.join(genome[chrm])
+    return genome
+
+
+def parse_alignment(options):
+    """Extracts quality und substitution information from an alignment given in different alignment formats"""
+
     qualities = dict()
     substitutions = dict()
     quality_per_pos = dict()
     avg_quality_per_pos = dict()
     line_counter = 0
     
-    if options.format == 'sam' and options.gio_file == '-':
-        print >> sys.stderr, 'Please specify a genome information object to complete information missing in the SAM file - option -g'
-        sys.exit(-1)
-
-    if options.gio_file != '-':
-        gio = genome_utils.GenomeInfo(options.gio_file)
-        gio.contig_names.sort()
-        genome = dict()
-
-    if options.format != 'bam':
-        infile = open(options.alignment, 'r')
+    if options.alignment != '-':
+        if options.format != 'bam':
+            infile = open(options.alignment, 'r')
+        else:
+            infile_handle = subprocess.Popen([options.samtools, 'view', options.alignment], stdout=subprocess.PIPE)
+            infile = infile_handle.stdout
     else:
-        infile_handle = subprocess.Popen([options.samtools, 'view', inf], stdout=subprocess.PIPE)
-        infile = infile_handle.stdout
+        infile = sys.stdin
+
+    genome = read_fasta(options)
 
     for line in infile:
-        if line[0] == '#':
+
+        ### skip comments and header sections
+        if line[0] in ['#', '@'] or line[:2] == 'SQ':
             continue
+
+        if options.verbose and line_counter % 1000 == 0:
+            print >> sys.stdout, 'read %i lines' % line_counter
+
         line_counter += 1
         sl = line.strip().split('\t')
+
         if options.format == 'bed':
             if len(sl) < 9:
                 continue
@@ -82,33 +121,26 @@ def read_alignment(options):
             quality = sl[13]
         elif options.format in ['sam', 'bam']:
             if len(sl) < 9:
+                print >> sys.stderr, line
+                print >> sys.stderr, 'Line incomplete: %i - skipping!\n' % line_counter
                 continue
-
-            if not genome.has_key(sl[2]):
-                print 'Reading chromosome %s' % sl[2]
-                try:
-                    fgen = open('%s/genome/%s.flat' % (gio.basedir, sl[2]))
-                    genome[sl[2]] = fgen.readline()
-                    fgen.close()
-                except:
-                    print >> sys.stderr, 'Chromosome name %s could not be found in %s' % (sl[2], options.gio_file)
-                    sys.exit(1)
 
             (size, op) = (re.split('[^0-9]', sl[5])[:-1], re.split('[0-9]*', sl[5])[1:])
             size = [int(i) for i in size]
-            chrm_pos = 0        # position in chrm
+            chrm_pos = 0    # position in chrm
             read_pos = 0    # position in the actual read
             
             read = sl[9]
             _read = ''
             gen_start = int(sl[3]) - 1
 
+            ### build up augmented read string containing all substitution information
             for pos in range(len(size)):
                 if op[pos] == 'M':
                     gen = genome[sl[2]][gen_start + chrm_pos : gen_start + chrm_pos + size[pos]].upper()
                     for p in range(size[pos]):
                         if gen[p] != read[read_pos + p]:
-                           _read += '[%s%s]' % (gen[p], read[read_pos + p])
+                            _read += '[%s%s]' % (gen[p], read[read_pos + p])
                         else:
                             _read += read[read_pos + p]
                     chrm_pos += size[pos]
@@ -124,30 +156,33 @@ def read_alignment(options):
                 elif op[pos] == 'N': # introns
                     chrm_pos += size[pos]
                 elif op[pos] == 'S': # softclips
+                    _read += read[read_pos:read_pos+size[pos]]
                     read_pos += size[pos]
-                    chrm_pos += size[pos]
+                    #chrm_pos += size[pos] #--> new SAM standard describes start-pos as first MATCHING position
 
             read = _read
             quality = sl[10]
             
-        start = read.find('[', 0)
-        
         ### check for substitutions
+        start = read.find('[', 0)
         while start > -1:
             ### skip indels
             if read[start + 1] == '-' or read[start + 2] == '-':
                 start = read.find('[', start + 1)
                 continue
-            if substitutions.has_key((read[start + 1], read[start + 2])):
+            try:
                 substitutions[(read[start + 1], read[start + 2])] += 1
-            else:
+            except KeyError:
                 substitutions[(read[start + 1], read[start + 2])] = 1
             start = read.find('[', start + 1)
 
         ### read quality values
+        if int(sl[1]) & 16 == 16:
+            strand_offset = len(quality) - 1
+        else:
+            strand_offset = 0
         offset = 0
         subst = False
-
         for q in range(len(quality)):
             if read[q + offset] == '[':
                 ### skip insertions
@@ -167,17 +202,18 @@ def read_alignment(options):
             qualities[(c, quality[q])][1] += 1
  
             ### build up list of quality distribution per read length
+            q_ = abs(strand_offset - q)
             try:
-                avg_quality_per_pos[q] += ord(quality[q])
+                avg_quality_per_pos[q_] += ord(quality[q])
             except KeyError:
-                avg_quality_per_pos[q] = ord(quality[q])
+                avg_quality_per_pos[q_] = ord(quality[q])
             try:
-                quality_per_pos[q][quality[q]] += 1
+                quality_per_pos[q_][quality[q]] += 1
             except KeyError:
                 try:
-                    quality_per_pos[q][quality[q]] = 1
+                    quality_per_pos[q_][quality[q]] = 1
                 except KeyError:
-                    quality_per_pos[q] = {quality[q]:1}
+                    quality_per_pos[q_] = {quality[q]:1}
 
     if options.format == 'bam':
         infile_handle.kill()
@@ -192,13 +228,11 @@ def read_alignment(options):
 def plot_histograms(options, qualities, substitutions, quality_per_pos, avg_quality_per_pos, line_counter):
     """Plots the error distribution relative to intron positions using gnuplot. """
 
-    import tempfile
-    import os
-    import subprocess
+    import matplotlib
 
-    plot_tmp_name = tempfile.mkstemp()[1]
-    plot_tmp = open(plot_tmp_name, 'w')
-    plotpath = options.histogram
+    if not options.x:
+        matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
 
     ### build up list of error probabilities per position and avg. error probabilities per quality value
     ### we assume, that the nucleotides are equally distributed 
@@ -217,121 +251,63 @@ def plot_histograms(options, qualities, substitutions, quality_per_pos, avg_qual
             error_prob_per_pos[pos] += (float(quality_per_pos[pos][qual]) / float(line_counter) * avg_substitution_rate)
             if not error_prob_per_quality.has_key(qual):    
                 error_prob_per_quality[qual] = avg_substitution_rate
-            #error_prob_per_quality[qual] += (float(quality_per_pos[pos][qual]) / float(line_counter) * avg_substitution_rate / len(quality_per_pos.keys()))
-            #error_prob_per_quality[qual] += (float(quality_per_pos[pos][qual]) / float(line_counter) * avg_substitution_rate)
-    print >> plot_tmp, 'set terminal png size 1024,1024 enhanced'
-    print >> plot_tmp, 'set output \"' + plotpath + '\"'
-    print >> plot_tmp, 'set multiplot'
 
-    print >> plot_tmp, 'reset'
-    print >> plot_tmp, 'set title \"Substitions\"'
-    print >> plot_tmp, 'set size 0.5, 0.5'
-    print >> plot_tmp, 'set origin 0.0, 0.0'
-    print >> plot_tmp, 'set xrange [-0.5:3.5]'
-    print >> plot_tmp, 'set xlabel \"to base\"' 
-    print >> plot_tmp, 'set ylabel \"rel. number of substitutions\"' 
-    print >> plot_tmp, 'set xtics (\"A\" 0, \"C\" 1, \"G\" 2, \"T\" 3)'
-
+   
+    ### pre-processing of substitution matrix
     labelset = ['A', 'C', 'G', 'T']
-    sums = [0, 0, 0, 0]
-    for idx in range(len(labelset)):
-        for idx2 in range(len(labelset)):
-            if substitutions.has_key((labelset[idx], labelset[idx2])):
-                sums[idx] += substitutions[(labelset[idx], labelset[idx2])]
+    sub_sum = dict()
+    for idx in labelset:
+        for idx2 in labelset:
+            if not substitutions.has_key((idx, idx2)):
+                substitutions[(idx, idx2)] = 0
+        sub_sum[idx] = sum([substitutions[idx, idx2] for idx2 in labelset]) 
+    for idx in labelset:
+        for idx2 in labelset:
+            substitutions[idx, idx2] /= float(sub_sum[idx])
+        
 
-    plot = 'plot '
-    data = '\n'
-    cum = [sums[i] for i in range(len(sums))]
-    for idx2 in range(len(labelset)):
-        plot += '\"-\" with boxes fs solid 0.7 title \"from %s\",' % labelset[idx2]
-        for idx in range(len(labelset)):
-            if substitutions.has_key((labelset[idx], labelset[idx2])):
-                data += (str(float(cum[idx]) / max(sums[idx], 1)) + '\n')
-                cum[idx] -= substitutions[(labelset[idx], labelset[idx2])]
-                #data += (str(float(substitutions[(labelset[idx], labelset[idx2])]) / max(sums[idx], 1)) + '\n')
-            else:
-                data += '0\n'
-        data += 'e\n'
-    print >> plot_tmp, plot[:-1], data
-    print >> plot_tmp, 'set key'
- 
-    print >> plot_tmp, 'reset'
-    print >> plot_tmp, 'set title \"Avg. quality per pos\"'
-    print >> plot_tmp, 'set size 0.5, 0.5'
-    print >> plot_tmp, 'set origin 0.5, 0.0'
-    print >> plot_tmp, 'set xlabel \"position\"' 
-    print >> plot_tmp, 'set ylabel \"avg. quality\"' 
-    print >> plot_tmp, 'set key'
+    plt.subplot(2, 2, 1)
+    colors = {'A':'red', 'C':'green', 'G':'blue', 'T':'yellow'}
+    cum_sum = [0, 0, 0, 0]
+    p = []
+    for label2 in labelset:
+        p.append(plt.bar(range(4), [substitutions[label1, label2] for label1 in labelset], bottom=cum_sum, color=colors[label2]))
+        cum_sum = [cum_sum[i] + substitutions[labelset[i], label2] for i in range(len(labelset))]
+    plt.title('Substitutions')
+    plt.xlabel('to base')
+    plt.ylabel('rel. number of substitutions')
+    plt.xlim((0, 5.5))
+    plt.xticks([0.5, 1.5, 2.5, 3.5], ('A', 'C', 'G', 'T'))
+    plt.legend((p[0], p[1], p[2], p[3]), ('A', 'C', 'G', 'T'), loc=1, borderaxespad=0.)
 
-    plot = 'plot \"-\" with boxes title \"avg. quality\",'
-    data = '\n'
-    index = avg_quality_per_pos.keys()
-    index.sort()
-    for pos in index:
-        data += (str(avg_quality_per_pos[pos]) + '\n')
-    data += 'e\n'
-    print >> plot_tmp, plot[:-1], data
+    plt.subplot(2, 2, 2)
+    plt.bar(range(len(avg_quality_per_pos)), [avg_quality_per_pos[pos] for pos in sorted(avg_quality_per_pos.keys())], color='w')
+    plt.title('Avg. quality per pos')
+    plt.xlabel('position')
+    plt.ylabel('avg. quality')
 
-    print >> plot_tmp, 'reset'
-    print >> plot_tmp, 'set title \"Error probability per pos\"'
-    print >> plot_tmp, 'set size 0.5, 0.5'
-    print >> plot_tmp, 'set origin 0.0, 0.5'
-    print >> plot_tmp, 'set xlabel \"position\"' 
-    print >> plot_tmp, 'set ylabel \"error prob.\"' 
-    print >> plot_tmp, 'set key'
+    plt.subplot(2, 2, 3)
+    plt.bar(range(len(error_prob_per_pos)), [error_prob_per_pos[pos] for pos in sorted(error_prob_per_pos.keys())])
+    plt.title('Error probability per pos')
+    plt.xlabel('position')
+    plt.ylabel('error prob.')
 
-    plot = 'plot \"-\" with boxes title \"error prob.\",'
-    data = '\n'
-    index = error_prob_per_pos.keys()
-    index.sort()
-    for pos in index:
-        data += (str(error_prob_per_pos[pos]) + '\n')
-    data += 'e\n'
-    print >> plot_tmp, plot[:-1], data
+    plt.subplot(2, 2, 4)
+    plt.bar(range(len(error_prob_per_quality)), [error_prob_per_quality[qual] for qual in sorted(error_prob_per_quality.keys())])
+    plt.title("Average error probability per quality") 
+    plt.xlabel("quality value")
+    plt.ylabel("error prob.")
 
-    print >> plot_tmp, 'reset'
-    print >> plot_tmp, 'set title \"Average error probability per quality\"'
-    print >> plot_tmp, 'set size 0.5, 0.5'
-    print >> plot_tmp, 'set origin 0.5, 0.5'
-    print >> plot_tmp, 'set xlabel \"quality value\"' 
-    print >> plot_tmp, 'set ylabel \"error prob.\"' 
-    print >> plot_tmp, 'set key'
-
-    plot = 'plot \"-\" with boxes title \"avg. error prob.\",'
-    data = '\n'
-    index = error_prob_per_quality.keys()
-    index.sort()
-    tics = 'set xtics ('
-    for tic in range(len(index)):
-        if not index[tic] in set(['\"', '%']):
-            tics += '\"%s\" %i,' % (index[tic], tic)
-#        if index[tic] == '\"':
-#            tics += '\"\\"\" %i,' % tic
-#        elif index[tic] == '\%':
-#            tics += '\"-\" %i,' % tic
-        else:
-            tics += '\"??\" %i,' % tic
-
-    tics = tics[:-1] + ')'
-    print >> plot_tmp, tics
-    for qual in index:
-        data += (str(error_prob_per_quality[qual]) + '\n')
-    data += 'e\n'
-    print >> plot_tmp, plot[:-1], data
-
-
-    print >> plot_tmp, 'unset multiplot'
-
-    plot_tmp.close()
-    subprocess.call(['gnuplot', plot_tmp_name])
-    os.remove(plot_tmp_name)
+    plt.subplots_adjust(hspace=0.4)
+    plt.savefig(options.histogram, format='pdf')
+    plt.show()
 
 
 def main():
     """Function controlling the program flow ... """
     options = parse_options(sys.argv)
 
-    (qualities, substitutions, quality_per_pos, avg_quality_per_pos, line_counter) = read_alignment(options)
+    (qualities, substitutions, quality_per_pos, avg_quality_per_pos, line_counter) = parse_alignment(options)
 
     plot_histograms(options, qualities, substitutions, quality_per_pos, avg_quality_per_pos, line_counter)
 
