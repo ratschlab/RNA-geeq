@@ -3,3 +3,4 @@
 *.sam
 *.bam.bai
 *.log
+.branch
