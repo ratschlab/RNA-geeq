@@ -3,5 +3,6 @@
 *.sam
 *.bam.bai
 *.log
+*.txt
 .branch
 .branch
