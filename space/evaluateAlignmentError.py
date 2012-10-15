@@ -1,3 +1,4 @@
+#!/usr/bin/python
 """
 
   This program is free software; you can redistribute it and/or modify
@@ -5,8 +6,8 @@
   the Free Software Foundation; either version 3 of the License, or
   (at your option) any later version.
   
-  Written (W) 2009-2010 Andre Kahles
-  Copyright (C) 2009-2010 by Friedrich Miescher Laboratory, Tuebingen, Germany
+  Written (W) 2009-2011 Andre Kahles
+  Copyright (C) 2009-2011 by Andre Kahles
   This program evaluates the error distribution in a given error model
   
   For detailed usage information type:
@@ -28,12 +29,12 @@ def parse_options(argv):
     parser = OptionParser()
     required = OptionGroup(parser, 'REQUIRED')
     required.add_option('-a', '--alignment', dest='alignment', metavar='FILE', help='alignment file', default='-')
-    required.add_option('-H', '--histogram', dest='histogram', metavar='PATH', help='print error histograms to PATH ', default='-')
+    required.add_option('-H', '--histograms', dest='histogram', metavar='FILE', help='print error histograms in pdf format into FILE', default='-')
+    required.add_option('-g', '--genome', dest='genome', metavar='FILE', help='Genome sequence in FASTA format', default='-')
     optional = OptionGroup(parser, 'OPTIONAL')
     optional.add_option('-s', '--samtools', dest='samtools', metavar='STRING', help='location of samtools on the system', default='samtools')
     optional.add_option('-f', '--format', dest='format', metavar='STRING', help='alignment file format sam or bed [default: sam]', default='sam')
-    optional.add_option('-g', '--genome', dest='genome', metavar='FILE', help='Genome sequence in FASTA format', default='-')
-    optional.add_option('-x', '--use-x', dest='x', action='store_true', help='Use X output [off]', default=False)
+    optional.add_option('-x', '--use-x', dest='x', action='store_true', help='Use graphical output [off]', default=False)
     optional.add_option('-v', '--verbose', dest='verbose', action='store_true', help='Set verbose output [off]', default=False)
     
     parser.add_option_group(required)
@@ -41,7 +42,7 @@ def parse_options(argv):
 
     (options, args) = parser.parse_args()
 
-    if len(argv) < 3:
+    if len(argv) < 4:
         parser.print_help()
         sys.exit(2)
 
@@ -92,11 +93,11 @@ def parse_alignment(options):
     line_counter = 0
     
     if options.alignment != '-':
-        if options.format != 'bam':
-            infile = open(options.alignment, 'r')
-        else:
+        if options.alignment[-3:] == 'bam' or options.format == 'bam':
             infile_handle = subprocess.Popen([options.samtools, 'view', options.alignment], stdout=subprocess.PIPE)
             infile = infile_handle.stdout
+        else:
+            infile = open(options.alignment, 'r')
     else:
         infile = sys.stdin
 
@@ -306,6 +307,9 @@ def plot_histograms(options, qualities, substitutions, quality_per_pos, avg_qual
 def main():
     """Function controlling the program flow ... """
     options = parse_options(sys.argv)
+    if options.histogram == '-':
+        print >> sys.stderr, "Please provide an output filename for the plots! - Use option -H <file>"
+        sys.exit(-1)
 
     (qualities, substitutions, quality_per_pos, avg_quality_per_pos, line_counter) = parse_alignment(options)
 

@@ -1,7 +1,26 @@
-"""This script generates statistical overviews for a given alignment. """
+#!/usr/bin/python
+"""
+
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 3 of the License, or
+  (at your option) any later version.
+  
+  Written (W) 2009-2011 Andre Kahles
+  Copyright (C) 2009-2011 by Andre Kahles
+
+  This program generates overviews of different statistical parameters 
+  of a given alignment files.
+  
+  For detailed usage information type:
+
+    python genAlignmentStatistic.py
+
+"""
+
+
 import sys
 import re
-import cPickle
 import subprocess
 
 def parse_options(argv):
@@ -14,7 +33,7 @@ def parse_options(argv):
     required = OptionGroup(parser, 'REQUIRED')
     required.add_option('-a', '--alignment', dest='align', metavar='FILE', help='alignment file in BAM  (default) or SAM (-S) format', default='-')
     optional = OptionGroup(parser, 'OPTIONAL')
-    optional.add_option('-R', '--ignore_multireads', dest='multireads', metavar='FILE', help='file containing the multireads to ignore', default='-')
+    optional.add_option('-R', '--ignore_multimappers', dest='ignore_multi', action='store_true', help='ignores multimappers, if marked in SAM file [off]', default=False)
     optional.add_option('-g', '--genome', dest='genome_fasta', metavar='FILE1[,FILE2, ...]', help='Genome sequence as fasta file(s) ', default='-')
     optional.add_option('-e', '--min_exon_len', dest='min_exon_len', metavar='INT', type='int', help='minimal exon length [0]', default=0)
     optional.add_option('-X', '--max_mismatches', dest='max_mismatches', metavar='INT', type='int', help='maximum number of allowed mismathes [unlimited]', default=-1)
@@ -23,6 +42,7 @@ def parse_options(argv):
     optional.add_option('-s', '--samtools_path', dest='samtools', metavar='PATH', help='absolute path to samtools, if not in PATH', default='samtools')
     optional.add_option('-S', '--SAM', dest='sam', action='store_true', help='input alignment is in SAM format [off]', default=False)
     optional.add_option('-M', '--max_intron_len', dest='max_intron_len', metavar='INT', type='int', help='maximal intron length [unlimited]', default=-1)
+    optional.add_option('-x', '--use-x', dest='x', action='store_true', help='Use graphical output [off]', default=False)
     parser.add_option_group(required)
     parser.add_option_group(optional)
 
@@ -34,23 +54,22 @@ def parse_options(argv):
 
     return options
 
-def read_fasta(infiles):
+def read_fasta(options):
 
     """Parses genome information from infiles in fasta-format"""
 
-    if infiles.count(',') > 0:
-        infiles = infiles.split(',')
-    else:
-        infiles = [infiles]
+    infiles = options.genome_fasta.split(',')
 
     genome = dict()
     curr_chr = ''
     for infile in infiles:
         for line in open(infile, 'r'):
             if line[0] == '>':
-                chr_name = line.strip()[2:]
+                chr_name = line.strip()[1:]
                 genome[chr_name] = ''
                 curr_chr = chr_name
+                if options.verbose:
+                    print >> sys.stderr, "parsing %s ..." % curr_chr
                 continue
 
             if curr_chr != '':
@@ -64,13 +83,14 @@ def read_fasta(infiles):
 def main():
     """Main function generating the alignment statistics."""
 
-    counter = 0
-    filter_counter = 0
+    ### parse options from argument vector
     options = parse_options(sys.argv)
 
     ### initializations
     number_of_exons = []
     intron_pos = []
+    counter = 0
+    filter_counter = 0
     unspliced = 0
     readlen = 0
 
@@ -80,24 +100,16 @@ def main():
         outfile_base = options.align
 
     if options.genome_fasta != '-':
-        genome = read_fasta(options.genome_fasta)
+        genome = read_fasta(options)
 
     ### set filter tags for filenames
     if options.min_exon_len > 0:
         outfile_base += '_me%s' % options.min_exon_len
-    if options.max_mismatches < 10000:
+    if options.max_mismatches > -1:
         outfile_base += '_mm%s' % options.max_mismatches
     if options.max_intron_len < 100000000:
         outfile_base += '_mi%s' % options.max_intron_len
  
-    multireads = set()
-    if options.multireads != '-':
-        print '\nParsing multireads from file %s' % options.multireads
-        print '-----------------------------------------'
-        for line in open(options.multireads, 'r'):
-            _l = line.strip().split('\t')
-            multireads.add((_l[0], int(_l[1])))
-
     mismatches = []
     deletions = []
     insertions = []
@@ -120,7 +132,7 @@ def main():
         counter += 1
         sl = line.strip().split('\t')
         
-        if len(sl) < 11 or (sl[0], int(sl[1]) & 128) in multireads:
+        if len(sl) < 11 or (options.ignore_multi and int(sl[1]) & 256 == 256):
             filter_counter += 1
             continue
 
@@ -128,7 +140,7 @@ def main():
             readlen = len(sl[9])
             read = sl[9].upper()
         else:
-            print >> sys.stderr, 'No read sequence given in alignment, nor in additional fastq-file!'
+            print >> sys.stderr, 'Error: No read sequence given in alignment file!'
             sys.exit(-1)
 
         if options.max_mismatches > -1:
@@ -143,7 +155,7 @@ def main():
                     filter_counter += 1
                     continue
             except KeyError:
-                print >> sys.stderr, 'No mismatch information available or read string missing in %s' % options.align
+                print >> sys.stderr, 'Error: Alignment file lacks mismatch informaition!'
                 sys.exit(1)
 
         if options.min_exon_len > 0:
@@ -278,6 +290,9 @@ def main():
                     qualities.extend([0] * (idx - len(qualities) - 1))
                     qualities.append(1)
 
+    import matplotlib
+    if not options.x:
+        matplotlib.use('Agg')
     import matplotlib.pyplot as plt
     plt.figure(1)
     plt.plot(intron_pos)
@@ -318,10 +333,5 @@ def main():
     print 'number of exons: \n%s' % str(number_of_exons)
     print '%s reads were unspliced' % unspliced
 
-    ### write plotlists to file, for later evaluation
-    ### TODO dump all statistics as binary pickle
-    #plot_out = (outfile_base + '.statistics.plotlist')
-    #cPickle.dump(plotlist, open(plot_out, 'w'))
- 
 if __name__ == '__main__':
     main()
