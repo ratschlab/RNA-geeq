@@ -2,7 +2,6 @@
 import sys
 import os
 import re
-import cPickle
 import subprocess
 import matplotlib
 matplotlib.use('Agg')
@@ -13,7 +12,7 @@ import numpy.random as npr
 import h5py
 import pdb
 
-from utils import *
+from modules.utils import *
 from optparse import OptionParser, OptionGroup
 
 def parse_options(argv, parser):

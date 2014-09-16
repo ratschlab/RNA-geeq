@@ -5,7 +5,7 @@ import sys
 import os
 import re
 import scipy as sp
-from parser import *
+from modules.parser import *
 
 def parse_options(argv):
 
@@ -31,12 +31,11 @@ def parse_options(argv):
     io.add_option('-l', '--lines', dest='lines', metavar='INT', type='int', help='maximal number of alignment lines to read [-]', default=None)
     io.add_option('-b', '--bam_input', dest='bam_input', action='store_true', help='alignment input has BAM format - does not work for STDIN [off]', default=False)
     io.add_option('-t', '--samtools', dest='samtools', metavar='PATH', help='if SAMtools is not in your PATH, provide the right path here (only neccessary for BAM input)', default='samtools')
-    io.add_option('-o', '--outfile_base', dest='outfile_base', metavar='PATH', help='basedir for outfiles written', default='-')
+    io.add_option('-o', '--outfile_base', dest='outfile_base', metavar='FILE', help='basename for outfiles written [<alignment>]', default='-')
     io.add_option('-v', '--verbose', dest='verbose', action='store_true', help='verbosity', default=False)
     optional = OptionGroup(parser, 'ADVANCED/EXPERIMENTAL')
     optional.add_option('-s', '--strand_specific', dest='strand_specific', action='store_true', help='data is strand specific', default=False)
     optional.add_option('-F', '--full_analysis', dest='full_analysis', action='store_true', help='generates overlap and coverage plots', default=False)
-    optional.add_option('-p', '--performance_log', dest='performance_log', action='store_true', help='store the intron recovery performance in extra log [off]', default=False)
     optional.add_option('-O', '--max_overlap', dest='max_overlap', metavar='INT', type='int', help='maximal evalutated exon overlap [5]', default='5')
     optional.add_option('-H', '--histogram', dest='histogram', metavar='PATH', help='destination PATH of evaluation plots', default='-')
     parser.add_option_group(required)
@@ -408,20 +407,18 @@ def main():
     
     options = parse_options(sys.argv)
 
-    if options.outfile_base != '-':
-        outfile_base = (options.outfile_base + '/' + options.alignment.split('/')[-1])
-    else:
-        outfile_base = options.alignment
+    if options.outfile_base == '-':
+        options.outfile_base = options.alignment
 
     ### set filter tags for filenames
     if options.min_exon_len > 0:
-        outfile_base += '_me%s' % options.min_exon_len
+        options.outfile_base += '_me%s' % options.min_exon_len
     if options.max_mismatches < 10000:
-        outfile_base += '_mm%s' % options.max_mismatches
+        options.outfile_base += '_mm%s' % options.max_mismatches
     if options.max_intron_len < 100000000:
-        outfile_base += '_mi%s' % options.max_intron_len
+        options.outfile_base += '_mi%s' % options.max_intron_len
     if options.min_coverage > 1:
-        outfile_base += '_mc%s' % options.min_coverage
+        options.outfile_base += '_mc%s' % options.min_coverage
 
     ### load or compute annotated intron list
     if options.anno.endswith('pickle'):
@@ -434,9 +431,9 @@ def main():
 
     ### load or compute alignment intron list
     if options.alignment.endswith('pickle'):
-        (alignment_list, align_cov_vec) = cPickle.load(open(options.alignment, 'r'))
+        (align_cov_vec, alignment_list, alignment_support) = cPickle.load(open(options.alignment, 'r'))
     elif os.path.exists(options.alignment + '.pickle'):
-        (alignment_list, align_cov_vec) = cPickle.load(open(options.alignment + '.pickle', 'r'))
+        (align_cov_vec, alignment_list, alignment_support) = cPickle.load(open(options.alignment + '.pickle', 'r'))
     else:
         ### check for blacklist to handle
         if options.exclude_set != '-':
@@ -488,6 +485,9 @@ def main():
     ### match intron lists
     precision = []
     recall = []
+    f1_score = []
+    f2_score = []
+    f3_score = []
     chrms = sp.unique(annotation_list[:, 0])
     for chrm in chrms:
         c_idx = sp.where(alignment_list[:, 0] == chrm)[0]
@@ -496,33 +496,56 @@ def main():
             matches = sp.sum(sp.in1d(row_strings(alignment_list[c_idx, :]), row_strings(annotation_list[a_idx, :])))
             precision.append(float(matches) / float(max(1, c_idx.shape[0])))
             recall.append(float(matches) / float(max(1, a_idx.shape[0])))
+            if precision[-1] + recall[-1] > 0:
+                f1_score.append(2 * precision[-1] * recall[-1] / (precision[-1] + recall[-1]))
+                f2_score.append(5 * precision[-1] * recall[-1] / ((4 * precision[-1]) + recall[-1]))
+                f3_score.append(10 * precision[-1] * recall[-1] / ((9 * precision[-1]) + recall[-1]))
+            else:
+                f1_score.append(0.0)
+                f2_score.append(0.0)
+                f3_score.append(0.0)
             print '-----------------------------'
             print ' in Chromosome %s ' % chrm 
             print '-----------------------------'
             print 'recall: %.6f' % recall[-1]
             print 'precision: %.6f' % precision[-1]
-            #non_matched[chrm] = set(alignment_list[chrm].keys()).difference(set(annotation_list[chrm].keys()))
+            print 'f1 score: %.6f' % f1_score[-1]
+            print 'f2 score: %.6f' % f2_score[-1]
+            print 'f3 score: %.6f' % f3_score[-1]
    
     ### compute total precision
     matches = sp.sum(sp.in1d(row_strings(alignment_list), row_strings(annotation_list)))
     total_recall = float(matches) / max(1, float(sp.sum(sp.in1d(annotation_list[:, 0], sp.unique(alignment_list[:, 0])))))
     total_precision = float(matches) / max(1, float(alignment_list.shape[0]))
+    if total_precision + total_recall > 0:
+        total_f1_score = (2 * total_precision * total_recall / (total_precision + total_recall))
+        total_f2_score = (5 * total_precision * total_recall / ((4 * total_precision) + total_recall))
+        total_f3_score = (10 * total_precision * total_recall / ((9 * total_precision) + total_recall))
+    else:
+        total_f1_score = 0.0
+        total_f2_score = 0.0
+        total_f3_score = 0.0
     print '-----------------------------'
     print ' average over all chromosomes '
     print '-----------------------------'
     print 'recall: %.6f' % total_recall
     print 'precision: %.6f' % total_precision
+    print 'f1 score: %.6f' % total_f1_score
+    print 'f2 score: %.6f' % total_f2_score
+    print 'f3 score: %.6f' % total_f3_score
 
-    if options.performance_log:
-        outf = open(outfile_base + '_performance.log', 'w')
-        print >> outf, '\t'.joun(chrms) + '\taverage'
-        print >> outf, '\t'.join(['%.6f' % x for x in recall]) + '\t%.6f' % total_recall 
-        print >> outf, '\t'.join(['%.6f' % x for x in precision]) + '\t%.6f' % total_precision
-        outf.close() 
+    outf = open(options.outfile_base + '.stat_overview.tsv', 'w')
+    print >> outf, '\t'.join(chrms) + '\taverage'
+    print >> outf, '\t'.join(['%.6f' % x for x in recall]) + '\t%.6f' % total_recall 
+    print >> outf, '\t'.join(['%.6f' % x for x in precision]) + '\t%.6f' % total_precision
+    print >> outf, '\t'.join(['%.6f' % x for x in f1_score]) + '\t%.6f' % total_f1_score
+    print >> outf, '\t'.join(['%.6f' % x for x in f2_score]) + '\t%.6f' % total_f2_score
+    print >> outf, '\t'.join(['%.6f' % x for x in f3_score]) + '\t%.6f' % total_f3_score
+    outf.close() 
     
     ### get coverage gff
     if False: #options.cov_gff:
-        build_coverage_gff(align_cov_map, outfile_base)
+        build_coverage_gff(align_cov_map, options.outfile_base)
 
     if options.full_analysis:
         ### evaluate overlap only for those reads not exactly matching the annotation introns
@@ -539,7 +562,7 @@ def main():
             plotlist.plot(options.histogram)
 
         ### write plotlists to file, for later evaluation
-        plot_out = (outfile_base + '.introns.plotlist')
+        plot_out = (options.outfile_base + '.introns.plotlist')
         cPickle.dump(plotlist, open(plot_out, 'w'))
     
 if __name__ == '__main__':
