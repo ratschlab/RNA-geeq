@@ -1,5 +1,6 @@
 """This script generates statistical overviews for a given alignment. """
 import sys
+import os
 import re
 import cPickle
 import subprocess
@@ -8,77 +9,57 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import scipy as sp
+import numpy.random as npr
+import h5py
 import pdb
 
 from utils import *
+from optparse import OptionParser, OptionGroup
 
-def parse_options(argv):
+def parse_options(argv, parser):
 
     """Parses options from the command line """
 
-    from optparse import OptionParser, OptionGroup
-
-    parser = OptionParser()
-    required = OptionGroup(parser, 'REQUIRED')
-    required.add_option('-a', '--alignment', dest='align', metavar='FILE', help='alignment file in sam format', default='-')
     optional = OptionGroup(parser, 'OPTIONAL')
-    optional.add_option('-R', '--ignore_multireads', dest='multireads', metavar='FILE', help='file containing the multireads to ignore', default='-')
     optional.add_option('-g', '--genome', dest='genome', metavar='FILE', help='genome in fasta or hdf5 format (needs ending .hdf5 for latter)', default='-')
-    optional.add_option('-e', '--min_exon_len', dest='min_exon_len', metavar='INT', type='int', help='minimal exon length [0]', default=0)
-    optional.add_option('-X', '--max_mismatches', dest='max_mismatches', metavar='INT', type='int', help='maximum number of allowed mismathes [-]', default=None)
-    optional.add_option('-M', '--max_intron_len', dest='max_intron_len', metavar='INT', type='int', help='maximal intron length [100000000]', default='100000000')
     optional.add_option('-I', '--ignore_missing_chr', dest='ignore_missing_chr', action='store_true', help='ignore chromosomes missing in the annotation', default=False)
     optional.add_option('-s', '--shift_start', dest='shift_start', action='store_false', help='turn shifting start of softclips to accomodate for old bug OFF - it is usually ON!', default=True)
     optional.add_option('-b', '--bam_input', dest='bam_input', action='store_true', help='input has BAM format - does not work for STDIN', default=False)
     optional.add_option('-S', '--samtools', dest='samtools', metavar='PATH', help='if SAMtools is not in your PATH, provide the right path here (only neccessary for BAM input)', default='samtools')
-    optional.add_option('-o', '--outfile_base', dest='outfile_base', metavar='PATH', help='basedir for outfiles written', default='-')
+    optional.add_option('-o', '--outfile_base', dest='outfile_base', metavar='PATH', help='basename for outfiles written [align_stats]', default='align_stats')
     optional.add_option('-l', '--lines', dest='lines', metavar='INT', type='int', help='maximal number of alignment lines to read [-]', default=None)
+    optional.add_option('-r', '--random', dest='random', metavar='FLOAT', type='float', help='probability to accept an input line -- effective subsampling [1.0]', default=1.0)
+    optional.add_option('-m', '--max_readlength', dest='max_readlen', metavar='INT', type='int', help='maximal read length to be considered [200]', default=200)
     optional.add_option('-v', '--verbose', dest='verbose', action='store_true', help='verbosity', default=False)
     optional.add_option('-d', '--debug', dest='debug', action='store_true', help='print debugging output', default=False)
-    parser.add_option_group(required)
     parser.add_option_group(optional)
 
-    (options, args) = parser.parse_args()
-    
-    if len(argv) < 2:
-        parser.print_help()
-        sys.exit(2)
+    return parser.parse_args()
 
-    return options
+def get_tags(sl):
+    """Extract tags from SAM line and return as dict"""
+
+    tags = dict()
+    for s in sl:
+        ssl = s.split(':')
+        if ssl[1] == 'i':
+            tags[ssl[0]] = int(ssl[2])
+        elif ssl[1] == 'f':
+            tags[ssl[0]] = float(ssl[2])
+        else:
+            tags[ssl[0]] = ssl[2]
+    return tags
 
 def main():
     """Main function generating the alignment statistics."""
 
     ### get command line arguments
-    options = parse_options(sys.argv)
+    parser = OptionParser(usage="%prog [options] LIST OF ALIGNMENT FILES")
+    (options, args) = parse_options(sys.argv, parser)
 
-    if options.outfile_base != '-':
-        if options.align != '-':
-            outfile_base = os.path.join(options.outfile_base, os.path.basename(options.align))
-        else:
-            outfile_base = os.path.join(options.outfile_base, 'results')
-    else:
-        if options.align != '-':
-            outfile_base = options.align
-        else:
-            print >> sys.stderr, "Please provide an output file basedir when reading from STDIN!"
-            sys.exit(-1)
-
-    ### set filter tags for filenames
-    if options.min_exon_len > 0:
-        outfile_base += '_me%s' % options.min_exon_len
-    if options.max_mismatches is not None:
-        outfile_base += '_mm%s' % options.max_mismatches
-    if options.max_intron_len < 100000000:
-        outfile_base += '_mi%s' % options.max_intron_len
- 
-    multireads = set()
-    if options.multireads != '-':
-        print '\nParsing multireads from file %s' % options.multireads
-        print '-----------------------------------------'
-        for line in open(options.multireads, 'r'):
-            _l = line.strip().split('\t')
-            multireads.add((_l[0], int(_l[1])))
+    if len(args) == 0:
+        parser.print_help()
+        sys.exit(1)
 
     ### load genome
     if options.genome != '-':
@@ -89,128 +70,151 @@ def main():
         else:
             genome = read_fasta(options.genome)
        
-    ### set infile streams
-    if options.align != '-':
-        infiles = []
-        for fi in options.align.strip(',').split(','):
-            if options.bam_input:
-                file_handle = subprocess.Popen([options.samtools, 'view', options.align], stdout=subprocess.PIPE) 
-                infiles.append(file_handle.stdout)
+    infiles = args
+
+    ### check, if infile is hdf5, in this case only do the plotting
+    if infiles[0].endswith('hdf5'):
+        for i, fname in enumerate(infiles):
+            print >> sys.stdout, 'Loading counts from hdf5 %s' % fname
+            h5_in = h5py.File(fname)
+            if i == 0:
+                plot_info = h5_in['plot_info'][:]
+                counts = dict()
+                filelist = h5_in['files'][:]
+                for key in h5_in:
+                    if key in ['files', 'plot_info']:
+                        continue
+                    counts[key] = h5_in[key][:]
             else:
-                infiles.append(open(options.align, 'r'))
+                filelist = sp.r_[filelist, h5_in['files'][:]]
+                for key in h5_in:
+                    if key in ['files', 'plot_info']:
+                        continue
+                    if len(h5_in[key].shape) > 1 and h5_in[key].shape[1] > counts[key].shape[1]:
+                        counts[key] = sp.c_[counts[key], sp.zeros((counts[key].shape[0], h5_in[key].shape[1] - counts[key].shape[1]))]
+                        counts[key] = sp.r_[counts[key], h5_in[key][:]]
+                    elif len(h5_in[key].shape) > 1 and h5_in[key].shape[1] < counts[key].shape[1]:
+                        tmp = h5_in[key][:]
+                        tmp = sp.c_[tmp, sp.zeros((tmp.shape[0], counts[key].shape[1] - h5_in[key].shape[1]))]
+                        counts[key] = sp.r_[counts[key], tmp]
+                    else:
+                        counts[key] = sp.r_[counts[key], h5_in[key][:]]
+            h5_in.close()
     else:
-        infiles = [sys.stdin]
+        ### initializations
+        filter_counter = 0
+        unspliced = 0
+        readlen = 0
+        max_readlen = 30
+        counts = dict()
+        for category in ['mismatches', 'deletions', 'insertions', 'qualities_per_pos', 'intron_pos', 'min_seg_len']:
+            counts[category] = sp.zeros((len(infiles), options.max_readlen), dtype='int')
+        counts['qualities'] = sp.zeros((len(infiles), 80), dtype='int')
+        counts['number_of_segments'] = sp.zeros((len(infiles), 10), dtype='int')
+        counts['deletion_lens'] = sp.zeros((len(infiles), 500), dtype='int')
+        counts['insertion_lens'] = sp.zeros((len(infiles), 500), dtype='int')
+        counts['multimappers'] = sp.zeros((len(infiles), 1000), dtype='int')
+        for category in ['unaligned_reads', 'primary_alignments', 'secondary_alignments', 'unique_alignments', 'non_unique_alignments']:
+            counts[category] = sp.zeros((len(infiles), ), dtype='int')
 
-    ### initializations
-    filter_counter = 0
-    unspliced = 0
-    readlen = 0
-    max_readlen = 30
-    last_id = ('', 0)
-    mismatches = sp.zeros((len(infiles), 1000), dtype='int')
-    deletions = sp.zeros((len(infiles), 1000), dtype='int')
-    insertions = sp.zeros((len(infiles), 1000), dtype='int')
-    qualities_per_pos = sp.zeros((len(infiles), 1000), dtype='int')
-    qualities = sp.zeros((len(infiles), 200), dtype='int')
-    number_of_exons = sp.zeros((len(infile), 100), dtype='int')
-    intron_pos = sp.zeros((len(infiles), 1000), dtype='int')
+        ### iterate over infiles
+        for f, fname in enumerate(infiles):
+            ### open infile handle
+            if fname == '-':
+                infile = sys.stdin
+            elif options.bam_input:
+                fh = subprocess.Popen([options.samtools, 'view', fname], stdout=subprocess.PIPE)
+                infile = fh.stdout
+            else:
+                infile = open(fname, 'r')
 
-    ### iterate over infiles
-    for f, infile in enumerate(infiles):
-        for counter, line in enumerate(infile):
-            if line[0] in ['@', '#' ] or line[:2] == 'SQ':
-                continue
-            if options.lines is not None and counter > options.lines:
-                break
-            if options.verbose and counter > 0 and counter % 10000 == 0:
-                print 'lines read: [ %s (taken: %s / filtered: %s)]' % (counter, counter - filter_counter, filter_counter)
-            sl = line.strip().split('\t')
+            taken_ids = set()
+
+            if options.verbose:
+                print >> sys.stdout, 'Parsing alignments from %s' % fname
+
+            for counter, line in enumerate(infile):
+                if line[0] in ['@', '#' ] or line[:2] == 'SQ':
+                    continue
+                if options.lines is not None and counter > options.lines:
+                    break
+                  
+                if options.verbose and counter > 0 and counter % 10000 == 0:
+                    print 'lines read: [ %s (taken: %s / filtered: %s)]' % (counter, counter - filter_counter, filter_counter)
+                sl = line.strip().split('\t')
+
+                if options.random < 1.0:
+                    if npr.rand() > options.random and not sl[0] in taken_ids:
+                        continue
+                    else:
+                        taken_ids.add(sl[0])
+                
+                if len(sl) < 11:
+                    filter_counter += 1
+                    continue
+
+                ### check if unmapped
+                if ((int(sl[1]) & 4) == 4):
+                    counts['unaligned_reads'][f] +=1
+                    continue
+
+                if sl[9] != '*':
+                    readlen = len(sl[9])
+                    read = sl[9].upper()
+                    max_readlen = max(readlen, max_readlen)
+                else:
+                    print >> sys.stderr, 'No read sequence given in SAM'
+                    sys.exit(-1)
+
+                is_secondary = ((int(sl[1]) & 256) == 256)
+                if is_secondary:
+                    counts['secondary_alignments'][f] += 1
+                else:
+                    counts['primary_alignments'][f] += 1
+
+                tags = get_tags(sl[11:])
+                if 'NH' in tags:
+                    if tags['NH'] == 1:
+                        counts['unique_alignments'][f] += 1
+                    else:
+                        counts['non_unique_alignments'][f] += 1
+                    counts['multimappers'][f, tags['NH']] += 1
+
+                #curr_id = (sl[0], int(sl[1]) & 196)
+                is_reversed = ((int(sl[1]) & 16) == 16)
+
+                ### record min segment length for spliced alignments
+                if 'N' in sl[5]: 
+                    __cig = sl[5]
+                    __cig = re.sub('[0-9]*[IHS]', '', __cig) 
+                    min_sl = min([sum([int('0'+i) for i in re.split('[^0-9]', '0' + _cig + 'Z0')][:-2]) for _cig in __cig.strip().split('N')])
+                    counts['min_seg_len'][f, min_sl] += 1
+
+                ### count exons / segments in read
+                counts['number_of_segments'][f, sl[5].count('N') + 1] += 1
+
+                ### check, if read is reversed -> must change coordinates
+                if is_reversed:
+                    _reversed = readlen - 1
+                else:
+                    _reversed = 0
+
+                ### count intron distribution for spliced reads
+                ### the intron position is measured as the length of the first exon/segment (0-based position counting)
+                if sl[5].find('N') == -1:
+                    unspliced += 1
+                else:
+                    ### handle deletions - they do not affect block length
+                    rl = sl[5]
+                    rl = re.sub('[0-9]*D', '', rl)
+                    rl = re.sub('[MISH]', 'M', rl) ### for this analysis softclips and hardclips are counted as positions in the original read
+                    segm_len = sp.cumsum([sp.array(x.split('M')[:-1], dtype='int').sum() for x in ('%s0' % rl).split('N')])
+
+                    ### in case of alignment to minus strand position is reversed
+                    for s in segm_len[:-1]:
+                        counts['intron_pos'][f, abs(_reversed - s)] += 1
             
-            if len(sl) < 11 or (sl[0], int(sl[1]) & 128) in multireads:
-                filter_counter += 1
-                continue
-
-            quality_string = ''
-            if sl[9] != '*':
-                readlen = len(sl[9])
-                read = sl[9].upper()
-                max_readlen = max(readlen, max_readlen)
-            else:
-                print >> sys.stderr, 'No read sequence given in SAM'
-                sys.exit(-1)
-
-            if options.max_mismatches is not None:
-                cont_flag = False
-                mm = get_mm(sl)
-                if mm == -1:
-                    print >> sys.stderr, 'No mismatch information available or read string missing in %s' % options.align
-                    sys.exit(1)
-                elif mm > options.max_mismatches:
-                    filter_counter += 1
-                    continue
-
-            if options.min_exon_len > 0:
-                cont_flag = False
-                __cig = sl[5]
-                __cig = re.sub('[0-9]*[IHS]', '', __cig) 
-                for _cig in __cig.strip().split('N'):
-                    if sum([int('0'+i) for i in re.split('[^0-9]', '0' + _cig + 'Z0')][:-2]) < options.min_exon_len:
-                        cont_flag = True
-                        break
-                if cont_flag:
-                    filter_counter += 1
-                    continue
-
-            if options.max_intron_len < 100000000:
-                cont_flag = False
-                (op, size) = (re.split('[0-9]*', sl[5])[1:], re.split('[^0-9]', sl[5])[:-1])
-                size = [int(i) for i in size]
-
-                for o in range(len(op)):
-                    if op[o] == 'N' and (size[o] > options.max_intron_len):
-                        cont_flag = True
-                        break
-                if cont_flag:
-                    filter_counter += 1
-                    continue
-
-            curr_id = (sl[0], int(sl[1]) & 196)
-
-            ### count exons / segments in read
-            try:
-                number_of_exons[sl[5].count('N') + 1] += 1
-            except KeyError:
-                number_of_exons[sl[5].count('N') + 1] = 1
-
-            ### check, if read is reversed -> must change coordinates
-            if (int(sl[1]) & 16) == 16:
-                _reversed = readlen - 1
-            else:
-                _reversed = 0
-
-            ### count intron distribution for spliced reads
-            ### the intron position is measured as the length of the first exon/segment (0-based position counting)
-            if sl[5].find('N') == -1:
-                unspliced += 1
-            else:
-                ### handle deletions - they do not affect block length
-                rl = sl[5]
-                rl = re.sub('[0-9]*D', '', rl)
-                rl = re.sub('[MISH]', '$', rl) ### for this analysis softclips and hardclips are counted as positions in the original read
-                exon = rl.split('N')[0]
-                exon_list = exon.split('$')
-
-                ### determine intron position (always position of the FIRST intron)
-                ### in case of alignment to minus strand position is reversed
-                exon_len = sum([int(i) for i in exon_list[:-1]])
-                try:
-                    intron_pos[abs(_reversed - exon_len)] += 1
-                except KeyError:
-                    intron_pos[abs(_reversed - exon_len)] = 1
-        
-            ### build up mismatch-statistics 
-            if options.genome != '-':
-
+                ### build up mismatch-statistics from genome if MD tag is not available 
                 (size, op) = (re.split('[^0-9]', sl[5])[:-1], re.split('[0-9]*', sl[5])[1:])
                 size = [int(i) for i in size]
                 chrm_pos = 0    # position in chrm
@@ -218,7 +222,7 @@ def main():
                 clipped_read_pos = 0
                 
                 for pos in range(len(size)):
-                    if op[pos] == 'M':
+                    if op[pos] == 'M' and options.genome != '-':
                         gen_start = int(sl[3]) - 1
                         try:
                             gen = genome[sl[2]][gen_start + chrm_pos : gen_start + chrm_pos + size[pos]].upper()
@@ -231,10 +235,7 @@ def main():
                         for p in range(size[pos]):
                             try:
                                 if gen[p] != read[read_pos + p]:
-                                    try:
-                                        mismatches[abs(_reversed - (clipped_read_pos + read_pos + p))] += 1
-                                    except KeyError:
-                                        mismatches[abs(_reversed - (clipped_read_pos + read_pos + p))] = 1
+                                    counts['mismatches'][f, abs(_reversed - (clipped_read_pos + read_pos + p))] += 1
                             except IndexError:
                                 if options.debug:
                                     print >> sys.stderr, 'gen: %s' % gen
@@ -248,17 +249,13 @@ def main():
                         chrm_pos += size[pos]
                         read_pos += size[pos]
                     elif op[pos] == 'I': # insertions
+                        counts['insertion_lens'][f, size[pos]] += 1
                         for _p in range(size[pos]):
-                            try:
-                                insertions[abs(_reversed - (read_pos + _p + clipped_read_pos))] += 1
-                            except KeyError:
-                                insertions[abs(_reversed - (read_pos + _p + clipped_read_pos))] = 1
+                            counts['insertions'][f, abs(_reversed - (read_pos + _p + clipped_read_pos))] += 1
                         read_pos += size[pos]
                     elif op[pos] == 'D': # deletions
-                        try:
-                            deletions[abs(_reversed - read_pos - clipped_read_pos)] += 1 # count only one deletion, not depending on number of positions deleted. ...size[pos]
-                        except KeyError:
-                            deletions[abs(_reversed - read_pos - clipped_read_pos)] = 1 #size[pos]
+                        counts['deletion_lens'][f, size[pos]] += 1
+                        counts['deletions'][f, abs(_reversed - read_pos - clipped_read_pos)] += 1 # count only one deletion, not depending on number of positions deleted. ...size[pos]
                         chrm_pos += size[pos]
                     elif op[pos] == 'N': # introns
                         chrm_pos += size[pos]
@@ -269,82 +266,124 @@ def main():
                     elif op[pos] == 'H': # hardclips
                         clipped_read_pos += size[pos]
 
-            ### build up quality distribution
-            if curr_id != last_id:
-                if quality_string == '' and len(sl) > 10 and sl[10] != '*':
-                    quality_string = sl[10]
-                    if (int(sl[1])) & 16 == 16:
-                        quality_string = quality_string[::-1]
+                ### build up quality distribution (only for primary alignments as this is a property of the key)
+                if int(sl[1]) & 256 != 256:
+                    if len(sl) > 10 and sl[10] != '*':
+                        if is_reversed:
+                            quality_string = sl[10][::-1]
+                        else:
+                            quality_string = sl[10]
 
-                if quality_string != '':
-                    for _pidx, _p in enumerate(quality_string):
-                        qualities[ord(_p)] += 1
-                        qualities_per_pos[_pidx] += ord(_p)
+                        for _pidx, _p in enumerate(quality_string):
+                            counts['qualities'][f, ord(_p)] += 1
+                            counts['qualities_per_pos'][f, _pidx] += ord(_p)
 
-            last_id = curr_id
+            ### clean up
+            if fname != '-':
+                infile.close()
+            del taken_ids
 
+
+        ### truncate counts to max non-zero x
+        for c in counts:
+            if len(counts[c].shape) > 1:
+                max_idx = 0
+                for i in range(counts[c].shape[0]):
+                    idx = sp.where(counts[c][i, :] > 0)[0]
+                    if idx.shape[0] > 0:
+                        max_idx = max(max_idx, min(idx[-1] + 1, counts[c].shape[1]))
+                    else:
+                        max_idx = counts[c].shape[1]
+                counts[c] = counts[c][:, :max_idx]
+            else:
+                idx = sp.where(counts[c] > 0)[0]
+                if idx.shape[0] > 0:
+                    max_idx = min(idx[-1] + 1, counts[c].shape[0])
+                    counts[c] = counts[c][:max_idx]
+
+        ### collect plot_info
+        ### [data_field, plot_type, transformation, x-label, y-label, title']
+        plot_info = [
+            ['intron_pos', 'plot', '', 'read position', 'frequency', 'Split Position Distribution'],
+            ['number_of_segments', 'bar', 'log10', 'number of segments', 'frequency', 'Number of Segments'],
+            ['mismatches', 'plot', '', 'read position', 'mismatches', 'Mismatch Distribution'],
+            ['insertions', 'plot', '', 'read position', 'insertions', 'Insertion Distribution'],
+            ['deletions', 'plot', '', 'read position', 'deletions', 'Deletion Distribution'],
+            ['qualities', 'plot', '', 'phred score', 'fequency', 'Quality Value Distribution'],
+            ['qualities_per_pos', 'plot', '', 'read position', 'avg. quality', 'Position-wise Quality Distribution'],
+            ['deletion_lens', 'plot', '', 'deletion length', 'frequency', 'Deletion Length Distribution'],
+            ['insertion_lens', 'plot', '', 'deletion length', 'frequency', 'Insertion Length Distribution'],
+            ['min_seg_len', 'plot', '', 'shortest segment length', 'frequency', 'Shortest Segment Length Distribution'],
+            ['multimappers', 'plot', '', 'number of hits', 'frequency', 'Distribution of Alignment Ambiguity'],
+            ['primary_alignments', 'bar', '', 'sample', 'number of alignments', 'Number of Primary Alignments'],
+            ['secondary_alignments', 'bar', '', 'sample', 'number of alignments', 'Number of Secondary Alignments'],
+            ['unaligned_reads', 'bar', '', 'sample', 'number of unaligned reads', 'Number of Unaligned Reads'],
+            ['unique_alignments', 'bar', '', 'sample', 'number of unique alignments', 'Number of Unique Alignments'],
+            ['non_unique_alignments', 'bar', '', 'sample', 'number of non-unique alignments', 'Number of Non-unique Alignments'],
+            ]
+        plot_info = sp.array(plot_info, dtype='str')
+
+        ### store output as HDF5 file
+        h5_out = h5py.File('%s.hdf5' % options.outfile_base, 'w')
+        h5_out.create_dataset(name='files', data=sp.array(infiles, dtype='str'))
+        h5_out.create_dataset(name='plot_info', data=plot_info)
+        for key in counts:
+            h5_out.create_dataset(name=key, data=counts[key], dtype='int')
+
+        h5_out.close()
+    
     ### plotting
-    fig = plt.figure(figsize=(10, 15), dpi=300)
-    gs = gridspec.GridSpec(4, 2)
+    fig = plt.figure(figsize=(10, 2*plot_info.shape[0]), dpi=300)
+    gs = gridspec.GridSpec((plot_info.shape[0] + 1) / 2, 2)
+    cmap = plt.get_cmap('jet')
+    norm = plt.Normalize(0, len(infiles))  
     axes = []
-    ### intron positions
-    axes.append(plt.subplot(gs[0, 0]))
-    axes[-1].plot(sp.arange(max_readlen), intron_pos[:max_readlen])
-    axes[-1].set_xlabel('read position')
-    axes[-1].set_ylabel('frequency')
-    axes[-1].set_title('Split Position Distribution')
-    ### number of exons
-    axes.append(plt.subplot(gs[0, 1]))
-    axes[-1].bar(sp.arange(number_of_exons.shape[0]), number_of_exons)
-    axes[-1].set_xlabel('nunber of segments')
-    axes[-1].set_ylabel('frequency')
-    axes[-1].set_title('Number of Segments')
-    ### mismatch distribution
-    axes.append(plt.subplot(gs[1, 0]))
-    axes[-1].plot(sp.arange(max_readlen), mismatches[:max_readlen])
-    axes[-1].set_xlabel('read position')
-    axes[-1].set_ylabel('mismatches')
-    axes[-1].set_title('Mismatch Distribution')
-    ### insertion distribution
-    axes.append(plt.subplot(gs[1, 1]))
-    axes[-1].plot(sp.arange(max_readlen), insertions[:max_readlen])
-    axes[-1].set_xlabel('read position')
-    axes[-1].set_ylabel('insertions')
-    axes[-1].set_title('Insertion Distribution')
-    ### deletion distribution
-    axes.append(plt.subplot(gs[2, 0]))
-    axes[-1].plot(sp.arange(max_readlen), deletions[:max_readlen])
-    axes[-1].set_xlabel('read position')
-    axes[-1].set_ylabel('deletions')
-    axes[-1].set_title('Deletion Distribution')
-    ### quality distribution
-    axes.append(plt.subplot(gs[2, 1]))
-    axes[-1].plot(sp.arange(qualities.shape[0]), qualities)
-    axes[-1].set_xlabel('phred score')
-    axes[-1].set_ylabel('frequency')
-    axes[-1].set_title('Quality Distribution')
-    ### deletion distribution
-    axes.append(plt.subplot(gs[3, 0]))
-    axes[-1].plot(sp.arange(max_readlen), qualities_per_pos[:max_readlen])
-    axes[-1].set_xlabel('read position')
-    axes[-1].set_ylabel('avg. quality')
-    axes[-1].set_title('Positional Quality Distribution')
-
-    if options.verbose:
-        print 'number of exons: \n%s' % str(number_of_exons)
-        print '%s reads were unspliced' % unspliced
+    for i in range(plot_info.shape[0]):
+        axes.append(plt.subplot(gs[i / 2, i % 2]))
+        plot(counts[plot_info[i, 0]], plot_info[i, :], ax=axes[-1])
 
     plt.tight_layout()
 
     ### plot data
-    plt.savefig('overview.pdf', format='pdf')
+    plt.savefig(options.outfile_base + '.overview.pdf', format='pdf')
 
-    if options.align != '-':
-        infile.close()
+def plot(data, plot_info, fname=None, ax=None):
+    """This is a wrapper function that handles the data plotting"""
 
-    ### write plotlists to file, for later evaluation
-    #plot_out = (outfile_base + '.statistics.plotlist')
-    #cPickle.dump(plotlist, open(plot_out, 'w'))
- 
+    if plot_info[2] == 'log10':
+        data = sp.log10(data)
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(6, 8), dpi=300)
+
+    if len(data.shape) > 1:
+
+        cmap = plt.get_cmap('jet')
+        norm = plt.Normalize(0, data.shape[0])  
+        if plot_info[1] == 'plot':
+            for f in range(data.shape[0]):
+                ax.plot(sp.arange(data.shape[1]), data[f, :], color=cmap(norm(f)))
+        elif plot_info[1] == 'bar':
+            w = 0.8 / data.shape[0]
+            for f in range(data.shape[0]):
+                ax.bar(sp.arange(data.shape[1]) + 0.1 + f*w, data[f, :], w, color=cmap(norm(f)))
+            ax.set_xticks(sp.arange(data.shape[1]) + 0.5)
+            ax.set_xticklabels(sp.arange(data.shape[1]))
+            #ax.set_xlim([0.5, ax.get_xlim()[1]])
+    else:
+        if plot_info[1] == 'plot':
+            ax.plot(sp.arange(data.shape[0]), data)
+        elif plot_info[1] == 'bar':
+            ax.bar(sp.arange(data.shape[0]) + 0.1, data)
+            ax.set_xticks(sp.arange(data.shape[0]) + 0.5)
+            ax.set_xticklabels(sp.arange(data.shape[0]))
+            #ax.set_xlim([0.5, ax.get_xlim()[1]])
+    ax.set_xlabel(plot_info[3]) 
+    if len(plot_info[2]) > 0:
+        ax.set_ylabel('%s %s' % (plot_info[2], plot_info[4]))
+    else:
+        ax.set_ylabel(plot_info[4]) 
+    ax.set_title(plot_info[5])
+
 if __name__ == '__main__':
     main()
