@@ -488,7 +488,6 @@ def main():
     ### match intron lists
     precision = []
     recall = []
-    pdb.set_trace()
     chrms = sp.unique(annotation_list[:, 0])
     for chrm in chrms:
         c_idx = sp.where(alignment_list[:, 0] == chrm)[0]
