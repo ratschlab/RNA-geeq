@@ -30,6 +30,7 @@ def parse_options(argv):
     io = OptionGroup(parser, 'I/O OPTIONS')
     io.add_option('-l', '--lines', dest='lines', metavar='INT', type='int', help='maximal number of alignment lines to read [-]', default=None)
     io.add_option('-b', '--bam_input', dest='bam_input', action='store_true', help='alignment input has BAM format - does not work for STDIN [off]', default=False)
+    io.add_option('-c', '--include_secondary', dest='include_secondary', action='store_true', help='also include secondary alignments into analysis [off]', default=False)
     io.add_option('-t', '--samtools', dest='samtools', metavar='PATH', help='if SAMtools is not in your PATH, provide the right path here (only neccessary for BAM input)', default='samtools')
     io.add_option('-o', '--outfile_base', dest='outfile_base', metavar='FILE', help='basename for outfiles written [<alignment>]', default='-')
     io.add_option('-v', '--verbose', dest='verbose', action='store_true', help='verbosity', default=False)

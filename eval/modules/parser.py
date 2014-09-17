@@ -3,6 +3,7 @@ import scipy as sp
 import pdb
 import subprocess
 import re
+import time
 
 from sputils import *
 
@@ -167,18 +168,25 @@ def intron_list_from_alignment(options, exclude_set=None):
     else:
         infile = open(options.alignment, 'r')
 
+    t0 = time.time()
     for counter, line in enumerate(infile):
         if line[0] in ['@', '#'] or line[:2] == 'SQ':
             continue
         if options.lines > 0 and counter > options.lines:
             break
-        if counter % 10000 == 0 and options.verbose:
-            print 'lines read: [ %s (taken: %s / filtered: %s)]' % (counter, counter - filter_counter, filter_counter)
+        if counter % 100000 == 0 and options.verbose:
+            t1 = time.time()
+            print 'lines read: [ %s (taken: %s / filtered: %s)] ... took %i sec' % (counter, counter - filter_counter, filter_counter, t1 - t0)
+            t0 = t1
 
         sl = line.strip().split('\t')
     
         ### unaligned reads
         if (int(sl[1]) & 4) == 4:
+            continue
+
+        ### secondary reads
+        if (int(sl[1]) & 256) == 256 and not options.include_secondary:
             continue
 
         if exclude_set is not None and (sl[0], (int(sl[1]) & 128 + int(sl[1]) & 64)) in exclude_set:

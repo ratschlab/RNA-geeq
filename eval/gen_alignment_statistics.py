@@ -10,6 +10,7 @@ import matplotlib.gridspec as gridspec
 import scipy as sp
 import numpy.random as npr
 import h5py
+import time
 import pdb
 
 from modules.utils import *
@@ -26,6 +27,7 @@ def parse_options(argv, parser):
     optional.add_option('-b', '--bam_input', dest='bam_input', action='store_true', help='input has BAM format - does not work for STDIN', default=False)
     optional.add_option('-S', '--samtools', dest='samtools', metavar='PATH', help='if SAMtools is not in your PATH, provide the right path here (only neccessary for BAM input)', default='samtools')
     optional.add_option('-o', '--outfile_base', dest='outfile_base', metavar='PATH', help='basename for outfiles written [align_stats]', default='align_stats')
+    optional.add_option('-L', '--legend', dest='legend', action='store_true', help='put legend into plots [off]', default=False)
     optional.add_option('-l', '--lines', dest='lines', metavar='INT', type='int', help='maximal number of alignment lines to read [-]', default=None)
     optional.add_option('-r', '--random', dest='random', metavar='FLOAT', type='float', help='probability to accept an input line -- effective subsampling [1.0]', default=1.0)
     optional.add_option('-m', '--max_readlength', dest='max_readlen', metavar='INT', type='int', help='maximal read length to be considered [200]', default=200)
@@ -38,15 +40,17 @@ def parse_options(argv, parser):
 def get_tags(sl):
     """Extract tags from SAM line and return as dict"""
 
+    #return  dict(z for z in [(x[0], int(x[2])) if x[1] == 'i' else (x[0], float(x[2])) if x[1] == 'f' else (x[0], x[2]) for x in [y.split(':') for y in sl]])
+
     tags = dict()
     for s in sl:
         ssl = s.split(':')
-        if ssl[1] == 'i':
-            tags[ssl[0]] = int(ssl[2])
-        elif ssl[1] == 'f':
-            tags[ssl[0]] = float(ssl[2])
-        else:
-            tags[ssl[0]] = ssl[2]
+        #if ssl[1] == 'i':
+        #    tags[ssl[0]] = int(ssl[2])
+        #elif ssl[1] == 'f':
+        #    tags[ssl[0]] = float(ssl[2])
+        #else:
+        tags[ssl[0]] = ssl[2]
     return tags
 
 def main():
@@ -116,6 +120,8 @@ def main():
         for category in ['unaligned_reads', 'primary_alignments', 'secondary_alignments', 'unique_alignments', 'non_unique_alignments']:
             counts[category] = sp.zeros((len(infiles), ), dtype='int')
 
+        t0 = time.time()
+
         ### iterate over infiles
         for f, fname in enumerate(infiles):
             ### open infile handle
@@ -138,8 +144,10 @@ def main():
                 if options.lines is not None and counter > options.lines:
                     break
                   
-                if options.verbose and counter > 0 and counter % 10000 == 0:
-                    print 'lines read: [ %s (taken: %s / filtered: %s)]' % (counter, counter - filter_counter, filter_counter)
+                if options.verbose and counter > 0 and counter % 100000 == 0:
+                    t1 = time.time()
+                    print 'lines read: [ %s (taken: %s / filtered: %s)] ... took %i sec' % (counter, counter - filter_counter, filter_counter, t1 - t0)
+                    t0 = t1
                 sl = line.strip().split('\t')
 
                 if options.random < 1.0:
@@ -173,24 +181,13 @@ def main():
 
                 tags = get_tags(sl[11:])
                 if 'NH' in tags:
-                    if tags['NH'] == 1:
+                    if int(tags['NH']) == 1:
                         counts['unique_alignments'][f] += 1
                     else:
                         counts['non_unique_alignments'][f] += 1
-                    counts['multimappers'][f, tags['NH']] += 1
+                    counts['multimappers'][f, int(tags['NH'])] += 1
 
-                #curr_id = (sl[0], int(sl[1]) & 196)
                 is_reversed = ((int(sl[1]) & 16) == 16)
-
-                ### record min segment length for spliced alignments
-                if 'N' in sl[5]: 
-                    __cig = sl[5]
-                    __cig = re.sub('[0-9]*[IHS]', '', __cig) 
-                    min_sl = min([sum([int('0'+i) for i in re.split('[^0-9]', '0' + _cig + 'Z0')][:-2]) for _cig in __cig.strip().split('N')])
-                    counts['min_seg_len'][f, min_sl] += 1
-
-                ### count exons / segments in read
-                counts['number_of_segments'][f, sl[5].count('N') + 1] += 1
 
                 ### check, if read is reversed -> must change coordinates
                 if is_reversed:
@@ -198,11 +195,17 @@ def main():
                 else:
                     _reversed = 0
 
-                ### count intron distribution for spliced reads
-                ### the intron position is measured as the length of the first exon/segment (0-based position counting)
-                if sl[5].find('N') == -1:
-                    unspliced += 1
-                else:
+                ### record min segment length for spliced alignments
+                if 'N' in sl[5]: 
+                    __cig = sl[5]
+                    __cig = re.sub('[0-9]*[IHS]', '', __cig) 
+                    min_sl = min([sum([int('0'+i) for i in re.split('[^0-9]', '0' + _cig + 'Z0')][:-2]) for _cig in __cig.strip().split('N')])
+                    counts['min_seg_len'][f, min_sl] += 1
+                    ### count exons / segments in read
+                    counts['number_of_segments'][f, sl[5].count('N') + 1] += 1
+
+                    ### count intron distribution for spliced reads
+                    ### the intron position is measured as the length of the first exon/segment (0-based position counting)
                     ### handle deletions - they do not affect block length
                     rl = sl[5]
                     rl = re.sub('[0-9]*D', '', rl)
@@ -212,7 +215,11 @@ def main():
                     ### in case of alignment to minus strand position is reversed
                     for s in segm_len[:-1]:
                         counts['intron_pos'][f, abs(_reversed - s)] += 1
-            
+                else:
+                    unspliced += 1
+                    ### count exons / segments in read
+                    counts['number_of_segments'][f, 1] += 1
+
                 ### build up mismatch-statistics from genome if MD tag is not available 
                 (size, op) = (re.split('[^0-9]', sl[5])[:-1], re.split('[0-9]*', sl[5])[1:])
                 size = [int(i) for i in size]
@@ -249,8 +256,10 @@ def main():
                         read_pos += size[pos]
                     elif op[pos] == 'I': # insertions
                         counts['insertion_lens'][f, size[pos]] += 1
-                        for _p in range(size[pos]):
-                            counts['insertions'][f, abs(_reversed - (read_pos + _p + clipped_read_pos))] += 1
+                        _p = abs(_reversed - (read_pos + clipped_read_pos))
+                        counts['insertions'][f, _p:_p + size[pos]] += 1
+                       # for _p in range(size[pos]):
+                       #     counts['insertions'][f, abs(_reversed - (read_pos + _p + clipped_read_pos))] += 1
                         read_pos += size[pos]
                     elif op[pos] == 'D': # deletions
                         counts['deletion_lens'][f, size[pos]] += 1
@@ -266,7 +275,8 @@ def main():
                         clipped_read_pos += size[pos]
 
                 ### build up quality distribution (only for primary alignments as this is a property of the key)
-                if int(sl[1]) & 256 != 256:
+                ### do it only for 1% of the reads as it is too costly otherwise
+                if not is_secondary and npr.random < 0.01:
                     if len(sl) > 10 and sl[10] != '*':
                         if is_reversed:
                             quality_string = sl[10][::-1]
@@ -330,45 +340,63 @@ def main():
             h5_out.create_dataset(name=key, data=counts[key], dtype='int')
 
         h5_out.close()
+
+        filelist = infiles
     
     ### plotting
-    fig = plt.figure(figsize=(10, 2*plot_info.shape[0]), dpi=300)
+    fig = plt.figure(figsize=(15, 2*plot_info.shape[0]), dpi=300)
     gs = gridspec.GridSpec((plot_info.shape[0] + 1) / 2, 2)
     cmap = plt.get_cmap('jet')
     norm = plt.Normalize(0, len(infiles))  
     axes = []
+    label_list = ['...' + x[-12:] if len(x) > 12 else x for x in filelist]
     for i in range(plot_info.shape[0]):
         axes.append(plt.subplot(gs[i / 2, i % 2]))
-        plot(counts[plot_info[i, 0]], plot_info[i, :], ax=axes[-1])
+        if options.legend:
+            plot(counts[plot_info[i, 0]], plot_info[i, :], ax=axes[-1], labels=label_list)
+        else:
+            plot(counts[plot_info[i, 0]], plot_info[i, :], ax=axes[-1])
 
     plt.tight_layout()
 
     ### plot data
     plt.savefig(options.outfile_base + '.overview.pdf', format='pdf')
 
-def plot(data, plot_info, fname=None, ax=None):
+def plot(data, plot_info, fname=None, ax=None, labels=None):
     """This is a wrapper function that handles the data plotting"""
 
     if plot_info[2] == 'log10':
         data = sp.log10(data)
 
     if ax is None:
-        fig, ax = plt.subplots(figsize=(6, 8), dpi=300)
+        fig, ax = plt.subplots(figsize=(12, 16), dpi=300)
 
     if len(data.shape) > 1:
 
         cmap = plt.get_cmap('jet')
         norm = plt.Normalize(0, data.shape[0])  
+        label_handles = []
         if plot_info[1] == 'plot':
             for f in range(data.shape[0]):
-                ax.plot(sp.arange(data.shape[1]), data[f, :], color=cmap(norm(f)))
+                if labels is not None:
+                    tmp, = ax.plot(sp.arange(data.shape[1]), data[f, :], color=cmap(norm(f)), label=labels[f])
+                    label_handles.append(tmp)
+                else:
+                    ax.plot(sp.arange(data.shape[1]), data[f, :], color=cmap(norm(f)))
         elif plot_info[1] == 'bar':
             w = 0.8 / data.shape[0]
             for f in range(data.shape[0]):
-                ax.bar(sp.arange(data.shape[1]) + 0.1 + f*w, data[f, :], w, color=cmap(norm(f)))
+                if labels is not None:
+                    tmp = ax.bar(sp.arange(data.shape[1]) + 0.1 + f*w, data[f, :], w, color=cmap(norm(f)), label=labels[f])
+                    label_handles.append(tmp)
+                else:
+                    ax.bar(sp.arange(data.shape[1]) + 0.1 + f*w, data[f, :], w, color=cmap(norm(f)))
             ax.set_xticks(sp.arange(data.shape[1]) + 0.5)
             ax.set_xticklabels(sp.arange(data.shape[1]))
             #ax.set_xlim([0.5, ax.get_xlim()[1]])
+        if labels is not None:
+            #ax.legend(label_handles, labels, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+            ax.legend(label_handles, labels, loc=0, fontsize='small')
     else:
         if plot_info[1] == 'plot':
             ax.plot(sp.arange(data.shape[0]), data)
