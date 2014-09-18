@@ -277,7 +277,7 @@ def main():
 
                 ### build up quality distribution (only for primary alignments as this is a property of the key)
                 ### do it only for 1% of the reads as it is too costly otherwise
-                if not is_secondary and npr.random < 0.01:
+                if not is_secondary and npr.random() < 0.01:
                     if len(sl) > 10 and sl[10] != '*':
                         if is_reversed:
                             quality_string = sl[10][::-1]
